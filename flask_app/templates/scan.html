@@ -1,0 +1,429 @@
+{% extends "layout.html" %}
+
+{% block title %}Scan Réseau - Moniteur de Sécurité Réseau{% endblock %}
+{% block page_title %}Scan Réseau{% endblock %}
+
+{% block content %}
+<div class="page-content">
+    <div class="card" style="margin-bottom: 2rem;">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-network-wired"></i>
+                Lancer un Scan Réseau
+            </h3>
+        </div>
+        <div class="card-body">
+            <div class="tabs">
+                <button class="tab-button active" onclick="showScanType('full')">
+                    <i class="fas fa-sitemap"></i> Scan Complet du Réseau
+                </button>
+                <button class="tab-button" onclick="showScanType('manual')">
+                    <i class="fas fa-crosshairs"></i> Scan de Ports (Hôte Spécifique)
+                </button>
+            </div>
+
+            <form id="scanForm" onsubmit="handleScan(event)">
+
+                <div id="fullScanSection" class="tab-content active" style="margin-top: 1rem;">
+                    <p style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
+                        Détecte les hôtes actifs sur une plage réseau et scanne les ports.
+                    </p>
+                    <div class="form-group">
+                        <label class="form-label" for="targetRange">Plage Réseau (CIDR)</label>
+                        <input type="text" class="form-input" id="targetRange" name="target" value="192.168.1.0/24"
+                            placeholder="ex: 192.168.1.0/24" required>
+                        <small style="color: var(--text-tertiary); display: block; margin-top: 0.5rem;">
+                            Format: XXX.XXX.XXX.XXX/XX
+                        </small>
+                    </div>
+                </div>
+
+                <div id="manualScanSection" class="tab-content" style="margin-top: 1rem; display: none;">
+                    <p style="margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
+                        Scanne les ports d'une adresse IP spécifique.
+                    </p>
+                    <div class="form-group">
+                        <label class="form-label" for="hostIP">Adresse IP Cible</label>
+                        <input type="text" class="form-input" id="hostIP" name="target" placeholder="ex: 192.168.1.1"
+                            required disabled>
+                        <small style="color: var(--text-tertiary); display: block; margin-top: 0.5rem;">
+                            Format: XXX.XXX.XXX.XXX
+                        </small>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="portsRange">Plage de Ports</label>
+                    <input type="text" class="form-input" id="portsRange" value="1-100"
+                        placeholder="ex: 1-100 ou 80,443,8080">
+                    <small style="color: var(--text-tertiary); display: block; margin-top: 0.5rem;">
+                        Format: 1-100, 80,443,8080 ou 1-65535
+                    </small>
+                </div>
+
+                <hr style="margin: 2rem 0;">
+
+                <h4 style="margin-bottom: 1.5rem; color: var(--text-primary);"><i class="fas fa-sliders-h"></i> Options
+                    de Scan</h4>
+                <div class="grid grid-3">
+                    <div class="form-group">
+                        <label class="form-label" for="detection">Options de Détection</label>
+                        <select class="form-select" id="detection">
+                            <option value="none" selected>Standard (Ports/Hôtes)</option>
+                            <option value="services">Services, Versions, OS</option>
+                        </select>
+                        <small style="color: var(--text-tertiary); display: block; margin-top: 0.5rem;">Détection:
+                            Services, Versions, OS.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="scanMethod">Méthode de Scan</label>
+                        <select class="form-select" id="scanMethod">
+                            <option value="connect" selected>Connect Scan (-sT) [Fiable]</option>
+                            <option value="syn">SYN Scan (-sS) [Rapide]</option>
+                        </select>
+                        <small style="color: var(--text-tertiary); display: block; margin-top: 0.5rem;">
+                            Connect: Standard Windows. SYN: Stealth / Root.
+                        </small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="format">Format des Résultats</label>
+                        <select class="form-select" id="format">
+                            <option value="normal" selected>Normal</option>
+                            <option value="detailed">Détaillé</option>
+                            <option value="xml">XML</option>
+                            <option value="json">JSON</option>
+                        </select>
+                        <small style="color: var(--text-tertiary); display: block; margin-top: 0.5rem;">Format de sortie
+                            pour les résultats.</small>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block" id="scanBtn" style="margin-top: 2rem;">
+                    <i class="fas fa-play"></i> Lancer le Scan
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 2rem;">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-info-circle"></i>
+                Statut du Scan
+            </h3>
+        </div>
+        <div class="card-body">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <div id="scanStatusIndicator"
+                    style="width: 12px; height: 12px; border-radius: 50%; background-color: var(--success-color);">
+                </div>
+                <div>
+                    <div style="font-weight: 600; color: var(--text-primary);" id="scanStatusText">Prêt</div>
+                    <div style="font-size: 0.875rem; color: var(--text-tertiary);" id="scanStatusDetail">Aucun scan en
+                        cours</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-list"></i>
+                Résultats du Scan
+            </h3>
+            <button class="btn btn-secondary btn-small" onclick="refreshResults()">
+                <i class="fas fa-sync-alt"></i> Rafraîchir
+            </button>
+        </div>
+        <div class="card-body" id="resultsContainer">
+            <p style="text-align: center; color: var(--text-tertiary); padding: 2rem;">
+                <i class="fas fa-inbox" style="font-size: 2rem; display: block; margin-bottom: 1rem; opacity: 0.5;"></i>
+                Aucun résultat de scan. Lancez un scan pour voir les résultats.
+            </p>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Styles pour les Onglets */
+    .tabs {
+        display: flex;
+        border-bottom: 1px solid var(--border-color);
+        margin-bottom: 1rem;
+    }
+
+    .tab-button {
+        padding: 0.75rem 1.5rem;
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-weight: 600;
+        color: var(--text-secondary);
+        border-bottom: 3px solid transparent;
+        transition: all 0.2s ease;
+    }
+
+    .tab-button:hover {
+        color: var(--text-primary);
+    }
+
+    .tab-button.active {
+        color: var(--primary-color);
+        border-bottom: 3px solid var(--primary-color);
+    }
+
+    .tab-content {
+        /* Assure que la section active s'affiche et l'autre est masquée */
+        display: none;
+    }
+
+    .tab-content.active {
+        display: block;
+    }
+
+    /* Style pour la grille des options */
+    .grid-3 {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1.5rem;
+    }
+</style>
+
+<script>
+    let currentScanType = 'full'; // État pour suivre le type de scan actif
+
+    // Fonction pour gérer le changement d'onglet
+    function showScanType(type) {
+        currentScanType = type;
+
+        // Gérer l'affichage des sections
+        document.getElementById('fullScanSection').style.display = (type === 'full') ? 'block' : 'none';
+        document.getElementById('manualScanSection').style.display = (type === 'manual') ? 'block' : 'none';
+
+        // Gérer les boutons d'onglet actifs
+        document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+        document.querySelector(`.tab-button:nth-child(${type === 'full' ? 1 : 2})`).classList.add('active');
+
+        // Gérer les attributs 'required' et 'disabled' pour la validation
+        document.getElementById('targetRange').required = (type === 'full');
+        document.getElementById('targetRange').disabled = (type !== 'full');
+        document.getElementById('hostIP').required = (type === 'manual');
+        document.getElementById('hostIP').disabled = (type !== 'manual');
+
+        // Mettre à jour le texte du bouton de soumission
+        document.getElementById('scanBtn').innerHTML = `<i class="fas fa-play"></i> Lancer le Scan ${type === 'full' ? 'Complet' : 'Manuel'}`;
+    }
+
+    // Initialiser l'affichage au chargement de la page
+    document.addEventListener('DOMContentLoaded', () => showScanType('full'));
+
+    // Fonction principale pour gérer la soumission du formulaire
+    async function handleScan(event) {
+        event.preventDefault();
+
+        const ports = document.getElementById('portsRange').value;
+        const detection = document.getElementById('detection').value;
+        // speed est retiré, on utilise hardcoded 'T4' dans le backend ou on l'envoie manuellement si on veut garder l'API générique
+        // const speed = document.getElementById('speed').value; 
+        const scan_method = document.getElementById('scanMethod').value;
+        const format = document.getElementById('format').value;
+        let target;
+        let scanFunction;
+
+        // Structure simple pour l'appel API
+        // On n'envoie PAS 'speed' car le select n'existe plus
+        // Le backend (app.py) mettra la vitesse par défaut.
+
+        if (currentScanType === 'full') {
+            target = document.getElementById('targetRange').value;
+            scanFunction = API.scanner.performFullScan;
+            if (!isValidCIDR(target)) {
+                Toast.error('Format CIDR invalide. Utilisez XXX.XXX.XXX.XXX/XX');
+                return;
+            }
+        } else { // manual
+            target = document.getElementById('hostIP').value;
+            scanFunction = API.scanner.scanPorts;
+            if (!isValidIP(target)) {
+                Toast.error('Adresse IP invalide');
+                return;
+            }
+        }
+
+        try {
+            updateScanStatus(true, `Démarrage du scan ${currentScanType === 'full' ? 'Complet' : 'Manuel'} sur ${target}...`);
+            document.getElementById('scanBtn').disabled = true;
+
+            // Appel personnalisé de l'API car nous avons changé la signature (ajout de scan_method)
+            // L'API générique (api.js) ne connait peut-être pas scan_method dans performFullScan...
+            // Attendons voir api.js.
+            // Si api.js n'est pas modifié, il faut vérifier comment il passe les arguments.
+
+            // Pour l'instant, modifions juste l'appel pour passer un objet ou les arguments, 
+            // Mais api.js est probablement un wrapper statique.
+
+            // On va assumer que API.scanner.performFullScan prend (target, ports, detection, speed, format)
+            // On va tricher et passer scan_method comme dernier argument si possible, ou modifier api.js.
+            // Le plus simple : appeler fetch directement ici pour être sûr.
+
+            const endpoint = currentScanType === 'full' ? '/api/scan/full' : '/api/scan/ports';
+            const payload = {
+                ports: ports,
+                scan_method: scan_method
+                // detection, format sont gérés ? App.py ne lit pas detection/format dans perform_full_scan ?
+                // Regardons app.py : il lit target_range, ports, scan_method.
+                // Il ne lit PAS detection, ni format pour le full scan !?
+                // Ah, app.py perform_full_scan appelle scanner.perform_full_network_scan avec juste target et ports (et maintenant speed/method).
+                // Il semble que app.py ignore 'detection' et 'format' pour le moment dans l'endpoint full scan.
+            };
+
+            if (currentScanType === 'full') {
+                payload.target_range = target;
+            } else {
+                payload.host_ip = target;
+            }
+
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                Toast.success('Scan lancé avec succès');
+                pollScanStatus();
+            } else {
+                throw new Error(data.error || 'Erreur inconnue');
+            }
+
+        } catch (error) {
+            Toast.error('Erreur lors du scan: ' + (error.message || 'Problème de connexion'));
+            updateScanStatus(false, 'Erreur');
+            document.getElementById('scanBtn').disabled = false;
+        }
+    }
+
+    // Poll scan status recursively
+    async function pollScanStatus() {
+        try {
+            const status = await API.scanner.getStatus();
+
+            if (status.in_progress) {
+                // Update status text if available
+                if (status.status) {
+                    updateScanStatus(true, status.status);
+                }
+                // Continue polling after 1 second
+                setTimeout(pollScanStatus, 1000);
+            } else {
+                // Scan finished
+                // Check if it was an error based on status text or just assume success if not in progress?
+                // The backend sets current_scan_status = "Erreur: ..." on exception.
+                if (status.status && status.status.startsWith('Erreur')) {
+                    updateScanStatus(false, status.status);
+                    Toast.error(status.status);
+                } else {
+                    updateScanStatus(false, 'Scan terminé');
+                    Toast.info('Scan terminé');
+                }
+
+                refreshResults();
+                document.getElementById('scanBtn').disabled = false;
+            }
+        } catch (error) {
+            console.error("Polling error", error);
+            // Don't stop polling immediately on one error, maybe network glitch? 
+            // But if it persists we should stop. For now, let's retry.
+            setTimeout(pollScanStatus, 2000);
+        }
+    }
+
+    // --- Fonctions utilitaires (conservées) ---
+
+    // Mettre à jour le statut du scan
+    function updateScanStatus(inProgress, message) {
+        const indicator = document.getElementById('scanStatusIndicator');
+        const statusText = document.getElementById('scanStatusText');
+        const statusDetail = document.getElementById('scanStatusDetail');
+
+        if (inProgress) {
+            indicator.style.backgroundColor = 'var(--warning-color)';
+            indicator.style.animation = 'pulse 1s infinite';
+            statusText.textContent = 'En cours';
+            statusDetail.textContent = message;
+        } else {
+            indicator.style.backgroundColor = 'var(--success-color)';
+            indicator.style.animation = 'none';
+            statusText.textContent = 'Prêt';
+            statusDetail.textContent = message;
+        }
+    }
+
+    // Charger et afficher les résultats
+    async function refreshResults() {
+        try {
+            const hosts = await API.scanner.getHosts();
+            const container = document.getElementById('resultsContainer');
+
+            if (hosts.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: var(--text-tertiary); padding: 2rem;"><i class="fas fa-inbox" style="font-size: 2rem; display: block; margin-bottom: 1rem; opacity: 0.5;"></i>Aucun hôte détecté</p>';
+                return;
+            }
+
+            let html = '<div style="overflow-x: auto;"><table class="table"><thead><tr><th>Adresse IP</th><th>Nom d\'Hôte</th><th>Ports Ouverts</th><th>Détails</th></tr></thead><tbody>';
+
+            hosts.forEach(host => {
+                const portCount = Object.keys(host.ports).length;
+                const portDetails = Object.entries(host.ports)
+                    .map(([port, service]) => `${port}: ${service}`)
+                    .join('<br>');
+
+                html += `
+                    <tr>
+                        <td><code style="background-color: var(--bg-tertiary); padding: 0.25rem 0.5rem; border-radius: 4px;">${host.ip_address}</code></td>
+                        <td>${host.hostname || 'N/A'}</td>
+                        <td><span class="badge badge-info">${portCount}</span></td>
+                        <td>
+                            <details style="cursor: pointer;">
+                                <summary style="color: var(--primary-color);">Afficher</summary>
+                                <div style="margin-top: 0.5rem; padding: 0.5rem; background-color: var(--bg-tertiary); border-radius: 4px; font-size: 0.85rem; color: var(--text-secondary);">
+                                    ${portDetails || 'Aucun port ouvert'}
+                                </div>
+                            </details>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table></div>';
+            container.innerHTML = html;
+        } catch (error) {
+            console.error('Erreur lors du chargement des résultats:', error);
+            document.getElementById('resultsContainer').innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-circle"></i> Erreur lors du chargement des résultats</div>';
+        }
+    }
+
+    // Validation (Ces fonctions devraient être définies quelque part)
+    function isValidCIDR(cidr) {
+        // Validation basique (à améliorer pour la production)
+        const regex = /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/;
+        return regex.test(cidr);
+    }
+
+    function isValidIP(ip) {
+        // Validation basique (à améliorer pour la production)
+        const regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+        return regex.test(ip);
+    }
+
+    // Charger les résultats au chargement de la page
+    document.addEventListener('DOMContentLoaded', refreshResults);
+</script>
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends "layout.html" %}
+
+{% block title %}Erreur Serveur - Moniteur de Sécurité Réseau{% endblock %}
+{% block page_title %}Erreur 500{% endblock %}
+
+{% block content %}
+<div class="page-content">
+    <div style="text-align: center; padding: 4rem 2rem;">
+        <div style="font-size: 5rem; color: var(--danger-color); margin-bottom: 1rem;">
+            <i class="fas fa-exclamation-triangle"></i>
+        </div>
+        <h1 style="font-size: 2rem; margin-bottom: 1rem; color: var(--text-primary);">Erreur Serveur</h1>
+        <p style="font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 2rem;">
+            Une erreur interne s'est produite. Veuillez réessayer plus tard.
+        </p>
+        <a href="/" class="btn btn-primary">
+            <i class="fas fa-home"></i> Retour à l'Accueil
+        </a>
+    </div>
+</div>
+{% endblock %}

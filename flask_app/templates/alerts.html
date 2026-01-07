@@ -1,0 +1,210 @@
+{% extends "layout.html" %}
+
+{% block title %}Alertes - Moniteur de Sécurité Réseau{% endblock %}
+{% block page_title %}Gestion des Alertes{% endblock %}
+
+{% block content %}
+<div class="page-content">
+    <!-- Statistiques des Alertes -->
+    <div class="grid grid-3" style="margin-bottom: 2rem;">
+        <div class="card">
+            <div style="text-align: center;">
+                <div style="font-size: 2rem; color: var(--danger-color); margin-bottom: 0.5rem;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <div style="font-size: 0.875rem; color: var(--text-tertiary); margin-bottom: 0.5rem;">Alertes Actives</div>
+                <div style="font-size: 1.75rem; font-weight: 600;" id="activeAlertsCount">0</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div style="text-align: center;">
+                <div style="font-size: 2rem; color: var(--warning-color); margin-bottom: 0.5rem;">
+                    <i class="fas fa-list"></i>
+                </div>
+                <div style="font-size: 0.875rem; color: var(--text-tertiary); margin-bottom: 0.5rem;">Total Alertes</div>
+                <div style="font-size: 1.75rem; font-weight: 600;" id="totalAlertsCount">0</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div style="text-align: center;">
+                <div style="font-size: 2rem; color: var(--success-color); margin-bottom: 0.5rem;">
+                    <i class="fas fa-check-double"></i>
+                </div>
+                <div style="font-size: 0.875rem; color: var(--text-tertiary); margin-bottom: 0.5rem;">Acquittées</div>
+                <div style="font-size: 1.75rem; font-weight: 600;" id="acknowledgedAlertsCount">0</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="card" style="margin-bottom: 2rem;">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-filter"></i>
+                Filtres
+            </h3>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-3">
+                <div class="form-group">
+                    <label class="form-label">Type d'Événement</label>
+                    <select class="form-select" id="filterType" onchange="filterAlerts()">
+                        <option value="">Tous les types</option>
+                        <option value="Port_Scan">Scan de Ports</option>
+                        <option value="DoS_Simple">Attaque DoS</option>
+                        <option value="Intrusion">Intrusion</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Statut</label>
+                    <select class="form-select" id="filterStatus" onchange="filterAlerts()">
+                        <option value="">Tous</option>
+                        <option value="active">Actives</option>
+                        <option value="acknowledged">Acquittées</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">&nbsp;</label>
+                    <button class="btn btn-secondary btn-block" onclick="resetFilters()">
+                        <i class="fas fa-redo"></i> Réinitialiser
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Liste des Alertes -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-bell"></i>
+                Alertes
+            </h3>
+            <button class="btn btn-secondary btn-small" onclick="refreshAlerts()">
+                <i class="fas fa-sync-alt"></i> Rafraîchir
+            </button>
+        </div>
+        <div class="card-body" id="alertsContainer">
+            <p style="text-align: center; color: var(--text-tertiary); padding: 2rem;">Chargement...</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    let allAlerts = [];
+
+    // Charger toutes les alertes
+    async function loadAlerts() {
+        try {
+            allAlerts = await API.alerts.getAll();
+            const counts = await API.alerts.getCount();
+
+            // Mettre à jour les compteurs
+            document.getElementById('activeAlertsCount').textContent = counts.active;
+            document.getElementById('totalAlertsCount').textContent = counts.total;
+            document.getElementById('acknowledgedAlertsCount').textContent = counts.total - counts.active;
+
+            displayAlerts(allAlerts);
+        } catch (error) {
+            console.error('Erreur lors du chargement des alertes:', error);
+            document.getElementById('alertsContainer').innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-circle"></i> Erreur lors du chargement des alertes</div>';
+        }
+    }
+
+    // Afficher les alertes
+    function displayAlerts(alerts) {
+        const container = document.getElementById('alertsContainer');
+
+        if (alerts.length === 0) {
+            container.innerHTML = '<p style="text-align: center; color: var(--text-tertiary); padding: 2rem;"><i class="fas fa-inbox" style="font-size: 2rem; display: block; margin-bottom: 1rem; opacity: 0.5;"></i>Aucune alerte</p>';
+            return;
+        }
+
+        let html = '<div style="overflow-x: auto;"><table class="table"><thead><tr><th>Timestamp</th><th>Type</th><th>Description</th><th>Composant</th><th>Statut</th><th>Actions</th></tr></thead><tbody>';
+
+        alerts.forEach(alert => {
+            const date = new Date(alert.timestamp);
+            const timeStr = date.toLocaleString('fr-FR');
+            const status = alert.acknowledged ? 'Acquittée' : 'Active';
+            const statusBadge = alert.acknowledged ? 'badge-success' : 'badge-danger';
+
+            html += `
+                <tr>
+                    <td style="font-size: 0.85rem;">${timeStr}</td>
+                    <td><span class="badge ${getBadgeClass(alert.event_type)}">${alert.event_type}</span></td>
+                    <td style="max-width: 300px; word-wrap: break-word;">${alert.description}</td>
+                    <td>${alert.component}</td>
+                    <td><span class="badge ${statusBadge}">${status}</span></td>
+                    <td>
+                        ${!alert.acknowledged ? `
+                            <button class="btn btn-small btn-success" onclick="acknowledgeAlert('${alert.id}')" title="Acquitter">
+                                <i class="fas fa-check"></i>
+                            </button>
+                        ` : `
+                            <span style="color: var(--text-tertiary); font-size: 0.85rem;">Acquittée</span>
+                        `}
+                    </td>
+                </tr>
+            `;
+        });
+
+        html += '</tbody></table></div>';
+        container.innerHTML = html;
+    }
+
+    // Filtrer les alertes
+    function filterAlerts() {
+        const typeFilter = document.getElementById('filterType').value;
+        const statusFilter = document.getElementById('filterStatus').value;
+
+        let filtered = allAlerts;
+
+        if (typeFilter) {
+            filtered = filtered.filter(alert => alert.event_type === typeFilter);
+        }
+
+        if (statusFilter === 'active') {
+            filtered = filtered.filter(alert => !alert.acknowledged);
+        } else if (statusFilter === 'acknowledged') {
+            filtered = filtered.filter(alert => alert.acknowledged);
+        }
+
+        displayAlerts(filtered);
+    }
+
+    // Réinitialiser les filtres
+    function resetFilters() {
+        document.getElementById('filterType').value = '';
+        document.getElementById('filterStatus').value = '';
+        displayAlerts(allAlerts);
+    }
+
+    // Acquitter une alerte
+    async function acknowledgeAlert(alertId) {
+        try {
+            await API.alerts.acknowledge(alertId);
+            Toast.success('Alerte acquittée');
+            loadAlerts();
+        } catch (error) {
+            Toast.error('Erreur lors de l\'acquittement');
+        }
+    }
+
+    // Rafraîchir les alertes
+    async function refreshAlerts() {
+        await loadAlerts();
+        Toast.info('Alertes rafraîchies');
+    }
+
+    // Charger les alertes au chargement de la page
+    document.addEventListener('DOMContentLoaded', () => {
+        loadAlerts();
+        // Rafraîchir toutes les 10 secondes
+        setInterval(loadAlerts, 10000);
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,194 @@
+{% extends "layout.html" %}
+
+{% block title %}Logs - Moniteur de Sécurité Réseau{% endblock %}
+{% block page_title %}Consultation des Logs{% endblock %}
+
+{% block content %}
+<div class="page-content">
+    <!-- Statistiques -->
+    <div class="card" style="margin-bottom: 2rem;">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-chart-line"></i>
+                Statistiques des Logs
+            </h3>
+        </div>
+        <div class="card-body">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-size: 0.875rem; color: var(--text-tertiary); margin-bottom: 0.5rem;">Total des Logs
+                    </div>
+                    <div style="font-size: 2rem; font-weight: 600; color: var(--primary-color);" id="logsCount">0</div>
+                </div>
+                <button class="btn btn-secondary" onclick="exportLogs()">
+                    <i class="fas fa-download"></i> Exporter en CSV
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="card" style="margin-bottom: 2rem;">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-filter"></i>
+                Filtres
+            </h3>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-3">
+                <div class="form-group">
+                    <label class="form-label">Type d'Événement</label>
+                    <select class="form-select" id="filterEventType" onchange="filterLogs()">
+                        <option value="">Tous les types</option>
+                        <option value="INFO">INFO</option>
+                        <option value="WARNING">WARNING</option>
+                        <option value="ERROR">ERROR</option>
+                        <option value="SCAN_START">SCAN_START</option>
+                        <option value="SCAN_END">SCAN_END</option>
+                        <option value="IDS_START">IDS_START</option>
+                        <option value="IDS_STOP">IDS_STOP</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Composant</label>
+                    <select class="form-select" id="filterComponent" onchange="filterLogs()">
+                        <option value="">Tous les composants</option>
+                        <option value="NetworkScanner">NetworkScanner</option>
+                        <option value="IDS">IDS</option>
+                        <option value="Flask">Flask</option>
+                        <option value="System">System</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">&nbsp;</label>
+                    <button class="btn btn-secondary btn-block" onclick="resetFilters()">
+                        <i class="fas fa-redo"></i> Réinitialiser
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Liste des Logs -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-file-alt"></i>
+                Logs
+            </h3>
+            <button class="btn btn-secondary btn-small" onclick="refreshLogs()">
+                <i class="fas fa-sync-alt"></i> Rafraîchir
+            </button>
+        </div>
+        <div class="card-body" id="logsContainer">
+            <p style="text-align: center; color: var(--text-tertiary); padding: 2rem;">Chargement...</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    let allLogs = [];
+
+    // Charger les logs
+    async function loadLogs() {
+        try {
+            allLogs = await API.logs.get(1000);
+            const count = await API.logs.getCount();
+
+            document.getElementById('logsCount').textContent = count.count;
+            displayLogs(allLogs);
+        } catch (error) {
+            console.error('Erreur lors du chargement des logs:', error);
+            document.getElementById('logsContainer').innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-circle"></i> Erreur lors du chargement des logs</div>';
+        }
+    }
+
+    // Afficher les logs
+    function displayLogs(logs) {
+        const container = document.getElementById('logsContainer');
+
+        if (logs.length === 0) {
+            container.innerHTML = '<p style="text-align: center; color: var(--text-tertiary); padding: 2rem;"><i class="fas fa-inbox" style="font-size: 2rem; display: block; margin-bottom: 1rem; opacity: 0.5;"></i>Aucun log</p>';
+            return;
+        }
+
+        let html = '<div style="overflow-x: auto;"><table class="table"><thead><tr><th>Timestamp</th><th>Type</th><th>Composant</th><th>Message</th></tr></thead><tbody>';
+
+        logs.forEach(log => {
+            const date = new Date(log.timestamp);
+            const timeStr = date.toLocaleString('fr-FR');
+
+            html += `
+                <tr>
+                    <td style="font-size: 0.85rem; white-space: nowrap;">${timeStr}</td>
+                    <td><span class="badge badge-info">${log.event_type}</span></td>
+                    <td><code style="background-color: var(--bg-tertiary); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.85rem;">${log.component}</code></td>
+                    <td style="max-width: 400px; word-wrap: break-word;">${log.message}</td>
+                </tr>
+            `;
+        });
+
+        html += '</tbody></table></div>';
+        container.innerHTML = html;
+    }
+
+    // Filtrer les logs
+    function filterLogs() {
+        const typeFilter = document.getElementById('filterEventType').value;
+        const componentFilter = document.getElementById('filterComponent').value;
+
+        let filtered = allLogs;
+
+        if (typeFilter) {
+            filtered = filtered.filter(log => log.event_type === typeFilter);
+        }
+
+        if (componentFilter) {
+            filtered = filtered.filter(log => log.component === componentFilter);
+        }
+
+        displayLogs(filtered);
+    }
+
+    // Réinitialiser les filtres
+    function resetFilters() {
+        document.getElementById('filterEventType').value = '';
+        document.getElementById('filterComponent').value = '';
+        displayLogs(allLogs);
+    }
+
+    // Exporter les logs en CSV
+    function exportLogs() {
+        if (allLogs.length === 0) {
+            Toast.warning('Aucun log à exporter');
+            return;
+        }
+
+        const data = allLogs.map(log => ({
+            'Timestamp': log.timestamp,
+            'Type': log.event_type,
+            'Composant': log.component,
+            'Message': log.message,
+            'Utilisateur': log.user
+        }));
+
+        exportToCSV(data, 'logs_export.csv');
+    }
+
+    // Rafraîchir les logs
+    async function refreshLogs() {
+        await loadLogs();
+        Toast.info('Logs rafraîchis');
+    }
+
+    // Charger les logs au chargement de la page
+    document.addEventListener('DOMContentLoaded', () => {
+        loadLogs();
+        // Rafraîchir toutes les 30 secondes
+        setInterval(loadLogs, 30000);
+    });
+</script>
+{% endblock %}

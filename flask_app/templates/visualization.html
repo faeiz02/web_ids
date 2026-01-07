@@ -1,0 +1,131 @@
+{% extends "layout.html" %}
+
+{% block title %}Visualisation - Moniteur de Sécurité Réseau{% endblock %}
+{% block page_title %}Visualisation des Événements{% endblock %}
+
+{% block content %}
+<div class="page-content">
+    <!-- Graphiques -->
+    <div class="grid grid-2" style="margin-bottom: 2rem;">
+        <!-- Graphique des Alertes -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-chart-bar"></i>
+                    Distribution des Alertes par Type
+                </h3>
+                <button class="btn btn-secondary btn-small" onclick="refreshAlertsChart()">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="alertsChartContainer" style="text-align: center; padding: 2rem; color: var(--text-tertiary);">
+                    <i class="fas fa-spinner" style="font-size: 2rem; animation: spin 1s linear infinite;"></i>
+                    <p>Chargement du graphique...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Graphique du Trafic -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fas fa-chart-bar"></i>
+                    Volume de Trafic par Hôte
+                </h3>
+                <button class="btn btn-secondary btn-small" onclick="refreshTrafficChart()">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="trafficChartContainer" style="text-align: center; padding: 2rem; color: var(--text-tertiary);">
+                    <i class="fas fa-spinner" style="font-size: 2rem; animation: spin 1s linear infinite;"></i>
+                    <p>Chargement du graphique...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Informations Supplémentaires -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-info-circle"></i>
+                À Propos des Visualisations
+            </h3>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-2">
+                <div>
+                    <h4 style="margin-bottom: 0.5rem; color: var(--text-primary);">Distribution des Alertes</h4>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem;">
+                        Ce graphique affiche le nombre d'alertes par type d'événement détecté par le système IDS. 
+                        Cela vous aide à identifier les types de menaces les plus fréquentes sur votre réseau.
+                    </p>
+                </div>
+                <div>
+                    <h4 style="margin-bottom: 0.5rem; color: var(--text-primary);">Volume de Trafic</h4>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem;">
+                        Ce graphique montre le volume de trafic réseau par adresse IP source. 
+                        Un volume anormalement élevé peut indiquer une attaque DoS ou un comportement suspect.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Charger le graphique des alertes
+    async function loadAlertsChart() {
+        try {
+            const response = await API.visualization.getAlertsChart();
+            const container = document.getElementById('alertsChartContainer');
+            
+            if (response.chart) {
+                container.innerHTML = `<img src="${response.chart}" style="max-width: 100%; height: auto; border-radius: 6px;">`;
+            } else {
+                container.innerHTML = '<p style="color: var(--text-tertiary); padding: 2rem;">Aucune donnée à visualiser</p>';
+            }
+        } catch (error) {
+            console.error('Erreur lors du chargement du graphique des alertes:', error);
+            document.getElementById('alertsChartContainer').innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-circle"></i> Erreur lors du chargement du graphique</div>';
+        }
+    }
+
+    // Charger le graphique du trafic
+    async function loadTrafficChart() {
+        try {
+            const response = await API.visualization.getTrafficChart();
+            const container = document.getElementById('trafficChartContainer');
+            
+            if (response.chart) {
+                container.innerHTML = `<img src="${response.chart}" style="max-width: 100%; height: auto; border-radius: 6px;">`;
+            } else {
+                container.innerHTML = '<p style="color: var(--text-tertiary); padding: 2rem;">Aucune donnée à visualiser</p>';
+            }
+        } catch (error) {
+            console.error('Erreur lors du chargement du graphique du trafic:', error);
+            document.getElementById('trafficChartContainer').innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-circle"></i> Erreur lors du chargement du graphique</div>';
+        }
+    }
+
+    // Rafraîchir le graphique des alertes
+    async function refreshAlertsChart() {
+        await loadAlertsChart();
+        Toast.info('Graphique rafraîchi');
+    }
+
+    // Rafraîchir le graphique du trafic
+    async function refreshTrafficChart() {
+        await loadTrafficChart();
+        Toast.info('Graphique rafraîchi');
+    }
+
+    // Charger les graphiques au chargement de la page
+    document.addEventListener('DOMContentLoaded', () => {
+        loadAlertsChart();
+        loadTrafficChart();
+    });
+</script>
+{% endblock %}

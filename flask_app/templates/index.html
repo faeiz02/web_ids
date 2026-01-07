@@ -1,0 +1,218 @@
+{% extends "layout.html" %}
+
+{% block title %}Accueil - Moniteur de Sécurité Réseau{% endblock %}
+{% block page_title %}Accueil{% endblock %}
+
+{% block content %}
+<div class="page-content">
+    <!-- Hero Section -->
+    <div class="card" style="margin-bottom: 2rem; background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%); border-color: rgba(59, 130, 246, 0.3);">
+        <div style="text-align: center; padding: 2rem;">
+            <h1 style="font-size: 2.5rem; margin-bottom: 1rem; color: var(--primary-light);">
+                <i class="fas fa-shield-alt"></i> Moniteur de Sécurité Réseau
+            </h1>
+            <p style="font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 2rem;">
+                Surveillance complète de votre réseau avec scan Nmap et détection d'intrusion Scapy
+            </p>
+            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                <a href="/scan" class="btn btn-primary">
+                    <i class="fas fa-network-wired"></i> Lancer un Scan
+                </a>
+                <a href="/dashboard" class="btn btn-secondary">
+                    <i class="fas fa-chart-line"></i> Tableau de Bord
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistiques Rapides -->
+    <div class="grid grid-4" style="margin-bottom: 2rem;">
+        <div class="card">
+            <div style="text-align: center;">
+                <div style="font-size: 2rem; color: var(--primary-color); margin-bottom: 0.5rem;">
+                    <i class="fas fa-desktop"></i>
+                </div>
+                <div style="font-size: 0.875rem; color: var(--text-tertiary); margin-bottom: 0.5rem;">Hôtes Actifs</div>
+                <div style="font-size: 1.75rem; font-weight: 600;" id="statsHosts">0</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div style="text-align: center;">
+                <div style="font-size: 2rem; color: var(--danger-color); margin-bottom: 0.5rem;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <div style="font-size: 0.875rem; color: var(--text-tertiary); margin-bottom: 0.5rem;">Alertes Actives</div>
+                <div style="font-size: 1.75rem; font-weight: 600;" id="statsAlerts">0</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div style="text-align: center;">
+                <div style="font-size: 2rem; color: var(--warning-color); margin-bottom: 0.5rem;">
+                    <i class="fas fa-file-alt"></i>
+                </div>
+                <div style="font-size: 0.875rem; color: var(--text-tertiary); margin-bottom: 0.5rem;">Logs Enregistrés</div>
+                <div style="font-size: 1.75rem; font-weight: 600;" id="statsLogs">0</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div style="text-align: center;">
+                <div style="font-size: 2rem; color: var(--success-color); margin-bottom: 0.5rem;">
+                    <i class="fas fa-shield-alt"></i>
+                </div>
+                <div style="font-size: 0.875rem; color: var(--text-tertiary); margin-bottom: 0.5rem;">Statut IDS</div>
+                <div style="font-size: 1.75rem; font-weight: 600;" id="statsIDS">Arrêté</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fonctionnalités Principales -->
+    <div style="margin-bottom: 2rem;">
+        <h2 style="font-size: 1.5rem; margin-bottom: 1rem; color: var(--text-primary);">
+            <i class="fas fa-star"></i> Fonctionnalités Principales
+        </h2>
+
+        <div class="grid grid-2">
+            <!-- Scan Réseau -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-network-wired" style="color: var(--primary-color);"></i>
+                        Scan Réseau
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <p>Détectez les hôtes actifs, scannez les ports et identifiez les services en cours d'exécution sur votre réseau.</p>
+                    <ul style="margin-top: 1rem; padding-left: 1.5rem; color: var(--text-secondary);">
+                        <li>Détection d'hôtes actifs (ping scan)</li>
+                        <li>Scan de ports TCP/UDP</li>
+                        <li>Détection des services et versions</li>
+                        <li>Scan complet du réseau</li>
+                    </ul>
+                    <a href="/scan" class="btn btn-primary btn-small" style="margin-top: 1rem;">
+                        <i class="fas fa-arrow-right"></i> Accéder
+                    </a>
+                </div>
+            </div>
+
+            <!-- Détection d'Intrusion -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-shield-alt" style="color: var(--danger-color);"></i>
+                        Détection d'Intrusion (IDS)
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <p>Surveillez le trafic réseau en temps réel et détectez les activités suspectes.</p>
+                    <ul style="margin-top: 1rem; padding-left: 1.5rem; color: var(--text-secondary);">
+                        <li>Surveillance du trafic réseau</li>
+                        <li>Détection de scans de ports</li>
+                        <li>Détection d'attaques DoS</li>
+                        <li>Analyse comportementale</li>
+                    </ul>
+                    <a href="/dashboard" class="btn btn-primary btn-small" style="margin-top: 1rem;">
+                        <i class="fas fa-arrow-right"></i> Accéder
+                    </a>
+                </div>
+            </div>
+
+            <!-- Gestion des Alertes -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-bell" style="color: var(--warning-color);"></i>
+                        Gestion des Alertes
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <p>Consultez, gérez et acquittez les alertes de sécurité détectées par le système.</p>
+                    <ul style="margin-top: 1rem; padding-left: 1.5rem; color: var(--text-secondary);">
+                        <li>Visualisation des alertes en temps réel</li>
+                        <li>Filtrage par type d'événement</li>
+                        <li>Acquittement des alertes</li>
+                        <li>Historique complet</li>
+                    </ul>
+                    <a href="/alerts" class="btn btn-primary btn-small" style="margin-top: 1rem;">
+                        <i class="fas fa-arrow-right"></i> Accéder
+                    </a>
+                </div>
+            </div>
+
+            <!-- Logs et Visualisation -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-chart-bar" style="color: var(--info-color);"></i>
+                        Logs et Visualisation
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <p>Consultez les logs détaillés et visualisez les données sous forme de graphiques.</p>
+                    <ul style="margin-top: 1rem; padding-left: 1.5rem; color: var(--text-secondary);">
+                        <li>Consultation des logs système</li>
+                        <li>Graphiques des alertes</li>
+                        <li>Analyse du trafic réseau</li>
+                        <li>Export des données</li>
+                    </ul>
+                    <a href="/logs" class="btn btn-primary btn-small" style="margin-top: 1rem;">
+                        <i class="fas fa-arrow-right"></i> Accéder
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Informations Système -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-info-circle"></i>
+                Informations Système
+            </h3>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-3">
+                <div>
+                    <div style="font-weight: 600; margin-bottom: 0.5rem; color: var(--text-primary);">Scan Réseau</div>
+                    <p style="color: var(--text-tertiary); font-size: 0.9rem;">Powered by Nmap - Scanner de ports et détection de services</p>
+                </div>
+                <div>
+                    <div style="font-weight: 600; margin-bottom: 0.5rem; color: var(--text-primary);">Détection d'Intrusion</div>
+                    <p style="color: var(--text-tertiary); font-size: 0.9rem;">Powered by Scapy - Analyse de trafic réseau en temps réel</p>
+                </div>
+                <div>
+                    <div style="font-weight: 600; margin-bottom: 0.5rem; color: var(--text-primary);">Interface Web</div>
+                    <p style="color: var(--text-tertiary); font-size: 0.9rem;">Flask + Jinja2 - Interface responsive et moderne</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Charger les statistiques au chargement de la page
+    async function loadStats() {
+        try {
+            const stats = await API.stats.getAll();
+            
+            document.getElementById('statsHosts').textContent = stats.hosts.total;
+            document.getElementById('statsAlerts').textContent = stats.alerts.active;
+            document.getElementById('statsLogs').textContent = stats.logs.total;
+            
+            const idsStatus = stats.ids.running ? 'Actif' : 'Arrêté';
+            document.getElementById('statsIDS').textContent = idsStatus;
+            
+            // Rafraîchir les statistiques toutes les 10 secondes
+            setTimeout(loadStats, 10000);
+        } catch (error) {
+            console.error('Erreur lors du chargement des statistiques:', error);
+        }
+    }
+    
+    // Charger les statistiques au chargement
+    document.addEventListener('DOMContentLoaded', loadStats);
+</script>
+{% endblock %}

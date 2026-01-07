@@ -1,0 +1,272 @@
+{% extends "layout.html" %}
+
+{% block title %}Tableau de Bord - Moniteur de Sécurité Réseau{% endblock %}
+{% block page_title %}Tableau de Bord{% endblock %}
+
+{% block content %}
+<div class="page-content">
+    <!-- Statistiques Principales -->
+    <div class="grid grid-4" style="margin-bottom: 2rem;">
+        <div class="card">
+            <div style="text-align: center;">
+                <div style="font-size: 2rem; color: var(--primary-color); margin-bottom: 0.5rem;">
+                    <i class="fas fa-desktop"></i>
+                </div>
+                <div style="font-size: 0.875rem; color: var(--text-tertiary); margin-bottom: 0.5rem;">Hôtes Actifs</div>
+                <div style="font-size: 1.75rem; font-weight: 600;" id="totalHosts">{{ stats.total_hosts }}</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div style="text-align: center;">
+                <div style="font-size: 2rem; color: var(--danger-color); margin-bottom: 0.5rem;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <div style="font-size: 0.875rem; color: var(--text-tertiary); margin-bottom: 0.5rem;">Alertes Actives</div>
+                <div style="font-size: 1.75rem; font-weight: 600;" id="activeAlerts">{{ stats.active_alerts }}</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div style="text-align: center;">
+                <div style="font-size: 2rem; color: var(--warning-color); margin-bottom: 0.5rem;">
+                    <i class="fas fa-list"></i>
+                </div>
+                <div style="font-size: 0.875rem; color: var(--text-tertiary); margin-bottom: 0.5rem;">Total Alertes</div>
+                <div style="font-size: 1.75rem; font-weight: 600;" id="totalAlerts">{{ stats.total_alerts }}</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div style="text-align: center;">
+                <div style="font-size: 2rem; {% if stats.ids_running %}color: var(--success-color);{% else %}color: var(--text-tertiary);{% endif %} margin-bottom: 0.5rem;">
+                    <i class="fas fa-shield-alt"></i>
+                </div>
+                <div style="font-size: 0.875rem; color: var(--text-tertiary); margin-bottom: 0.5rem;">Statut IDS</div>
+                <div style="font-size: 1.75rem; font-weight: 600;" id="idsStatus">
+                    {% if stats.ids_running %}
+                        <span style="color: var(--success-color);">Actif</span>
+                    {% else %}
+                        <span style="color: var(--text-tertiary);">Arrêté</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contrôle IDS -->
+    <div class="card" style="margin-bottom: 2rem;">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-shield-alt"></i>
+                Contrôle du Système de Détection d'Intrusion (IDS)
+            </h3>
+        </div>
+        <div class="card-body">
+            <div style="display: flex; gap: 1rem; align-items: center;">
+                <div style="flex: 1;">
+                    <p style="margin-bottom: 0.5rem; color: var(--text-secondary);">
+                        L'IDS surveille le trafic réseau en temps réel et détecte les activités suspectes.
+                    </p>
+                    <div style="font-size: 0.875rem; color: var(--text-tertiary);">
+                        <p style="margin-bottom: 0.25rem;">
+                            <i class="fas fa-info-circle"></i>
+                            Détecte les scans de ports, les attaques DoS et les comportements anormaux
+                        </p>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 1rem;">
+                    <button class="btn btn-success" id="startIdsBtn" onclick="startIDS()">
+                        <i class="fas fa-play"></i> Démarrer
+                    </button>
+                    <button class="btn btn-danger" id="stopIdsBtn" onclick="stopIDS()" style="display: none;">
+                        <i class="fas fa-stop"></i> Arrêter
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hôtes Actifs -->
+    <div class="card" style="margin-bottom: 2rem;">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-desktop"></i>
+                Hôtes Actifs Détectés
+            </h3>
+            <button class="btn btn-secondary btn-small" onclick="refreshHosts()">
+                <i class="fas fa-sync-alt"></i> Rafraîchir
+            </button>
+        </div>
+        <div class="card-body" id="hostsContainer">
+            <p style="text-align: center; color: var(--text-tertiary);">Chargement...</p>
+        </div>
+    </div>
+
+    <!-- Alertes Récentes -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-exclamation-triangle"></i>
+                Alertes Récentes
+            </h3>
+            <a href="/alerts" class="btn btn-secondary btn-small">
+                <i class="fas fa-arrow-right"></i> Voir Tout
+            </a>
+        </div>
+        <div class="card-body" id="alertsContainer">
+            <p style="text-align: center; color: var(--text-tertiary);">Chargement...</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Démarrer l'IDS
+    async function startIDS() {
+        try {
+            await API.ids.start(null);
+            Toast.success('IDS démarré avec succès');
+            updateIDSStatus();
+        } catch (error) {
+            Toast.error('Erreur lors du démarrage de l\'IDS');
+        }
+    }
+
+    // Arrêter l'IDS
+    async function stopIDS() {
+        try {
+            await API.ids.stop();
+            Toast.success('IDS arrêté avec succès');
+            updateIDSStatus();
+        } catch (error) {
+            Toast.error('Erreur lors de l\'arrêt de l\'IDS');
+        }
+    }
+
+    // Mettre à jour le statut de l'IDS
+    async function updateIDSStatus() {
+        try {
+            const status = await API.ids.getStatus();
+            const startBtn = document.getElementById('startIdsBtn');
+            const stopBtn = document.getElementById('stopIdsBtn');
+            const statusDiv = document.getElementById('idsStatus');
+
+            if (status.running) {
+                startBtn.style.display = 'none';
+                stopBtn.style.display = 'block';
+                statusDiv.innerHTML = '<span style="color: var(--success-color);">Actif</span>';
+            } else {
+                startBtn.style.display = 'block';
+                stopBtn.style.display = 'none';
+                statusDiv.innerHTML = '<span style="color: var(--text-tertiary);">Arrêté</span>';
+            }
+        } catch (error) {
+            console.error('Erreur lors de la mise à jour du statut IDS:', error);
+        }
+    }
+
+    // Charger les hôtes actifs
+    async function loadHosts() {
+        try {
+            const hosts = await API.scanner.getHosts();
+            const container = document.getElementById('hostsContainer');
+
+            if (hosts.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: var(--text-tertiary);">Aucun hôte détecté. Lancez un scan réseau.</p>';
+                return;
+            }
+
+            let html = '<table class="table"><thead><tr><th>Adresse IP</th><th>Nom d\'Hôte</th><th>Ports Ouverts</th><th>Statut</th></tr></thead><tbody>';
+
+            hosts.forEach(host => {
+                const portCount = Object.keys(host.ports).length;
+                html += `
+                    <tr>
+                        <td><code style="background-color: var(--bg-tertiary); padding: 0.25rem 0.5rem; border-radius: 4px;">${host.ip_address}</code></td>
+                        <td>${host.hostname}</td>
+                        <td>${portCount}</td>
+                        <td><span class="badge ${host.is_active ? 'badge-success' : 'badge-danger'}">${host.is_active ? 'Actif' : 'Inactif'}</span></td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        } catch (error) {
+            console.error('Erreur lors du chargement des hôtes:', error);
+            document.getElementById('hostsContainer').innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-circle"></i> Erreur lors du chargement des hôtes</div>';
+        }
+    }
+
+    // Rafraîchir les hôtes
+    async function refreshHosts() {
+        await loadHosts();
+        Toast.info('Hôtes rafraîchis');
+    }
+
+    // Charger les alertes récentes
+    async function loadAlerts() {
+        try {
+            const alerts = await API.alerts.getActive();
+            const container = document.getElementById('alertsContainer');
+
+            if (alerts.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: var(--text-tertiary); padding: 2rem;">Aucune alerte active</p>';
+                return;
+            }
+
+            let html = '<div style="max-height: 400px; overflow-y: auto;">';
+
+            alerts.slice(0, 5).forEach(alert => {
+                const date = new Date(alert.timestamp);
+                const timeStr = date.toLocaleTimeString('fr-FR');
+                html += `
+                    <div style="padding: 1rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: start;">
+                        <div style="flex: 1;">
+                            <div style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem;">
+                                <span class="badge ${getBadgeClass(alert.event_type)}">${alert.event_type}</span>
+                                <span style="font-size: 0.875rem; color: var(--text-tertiary);">${timeStr}</span>
+                            </div>
+                            <p style="margin: 0; color: var(--text-secondary);">${alert.description}</p>
+                        </div>
+                        <button class="btn btn-small btn-success" onclick="acknowledgeAlert('${alert.id}')" style="margin-left: 1rem;">
+                            <i class="fas fa-check"></i>
+                        </button>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            container.innerHTML = html;
+        } catch (error) {
+            console.error('Erreur lors du chargement des alertes:', error);
+            document.getElementById('alertsContainer').innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-circle"></i> Erreur lors du chargement des alertes</div>';
+        }
+    }
+
+    // Acquitter une alerte
+    async function acknowledgeAlert(alertId) {
+        try {
+            await API.alerts.acknowledge(alertId);
+            Toast.success('Alerte acquittée');
+            loadAlerts();
+        } catch (error) {
+            Toast.error('Erreur lors de l\'acquittement');
+        }
+    }
+
+    // Charger les données au chargement de la page
+    document.addEventListener('DOMContentLoaded', () => {
+        updateIDSStatus();
+        loadHosts();
+        loadAlerts();
+
+        // Rafraîchir les données toutes les 15 secondes
+        setInterval(() => {
+            updateIDSStatus();
+            loadHosts();
+            loadAlerts();
+        }, 15000);
+    });
+</script>
+{% endblock %}
