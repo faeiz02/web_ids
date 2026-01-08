@@ -1,7 +1,11 @@
-from scapy.all import sniff, IP, TCP, UDP
+from scapy.all import sniff, IP, TCP, UDP, Raw
 from managers import AlertManager, LogManager
 import threading
 import time
+import json
+import re
+import os
+from urllib.parse import unquote
 
 class IDS:
     """
@@ -15,7 +19,19 @@ class IDS:
         self._stop_event = threading.Event()
         self.port_scan_attempts = {} # {ip_src: {port: count}}
         self.traffic_volume = {} # {ip_src: bytes_count}
-        self.volume_threshold = 1000000 # 1MB de trafic comme seuil simple pour DoS
+        self.volume_threshold = 10000000 # 10MB de trafic comme seuil simple pour DoS
+        self.signatures = self._load_signatures()
+
+    def _load_signatures(self, filepath="signatures.json"):
+        """Charge les signatures d'attaques depuis un fichier JSON."""
+        filepath = os.path.join(os.path.dirname(__file__), filepath)
+        if os.path.exists(filepath):
+            try:
+                with open(filepath, 'r') as f:
+                    return json.load(f)
+            except Exception as e:
+                self.log_manager.log(f"Erreur lors du chargement des signatures: {e}", event_type="ERROR", component="IDS")
+        return []
 
     def _analyze_packet(self, packet):
         """Analyse un paquet pour détecter des activités suspectes."""
@@ -34,18 +50,76 @@ class IDS:
                 self.alert_manager.generate_alert(
                     f"Possible attaque DoS simple détectée de {ip_src}. Volume de trafic: {self.traffic_volume[ip_src]} bytes.",
                     event_type="DoS_Simple",
-                    component="IDS"
+                    component="IDS",
+                    source_ip=ip_src
                 )
                 # Réinitialiser pour éviter les alertes répétitives immédiates
                 self.traffic_volume[ip_src] = 0 
 
             # 2. Détection de scan de ports (3.2.1)
             if TCP in packet:
+                src_port = packet[TCP].sport
+                dst_port = packet[TCP].dport
+                
+                # DEBUG: Voir tout le trafic TCP
+                print(f"[DEBUG] TCP Packet: {ip_src}:{src_port} -> {packet[IP].dst}:{dst_port}")
+
                 if packet[TCP].flags == 'S': # SYN packet - début de connexion
-                    self._detect_port_scan(ip_src, packet[TCP].dport)
-            
+                    self._detect_port_scan(ip_src, dst_port)
+                
+                # 3. Détection par signature (3.2.3)
+                if packet.haslayer(Raw):
+                    try:
+                        payload = packet[Raw].load.decode('utf-8', errors='ignore')
+                        decoded_payload = unquote(payload)
+                        # self._check_signatures(decoded_payload, ip_src, dst_port, "TCP")
+                        # Changement: on passe src et dst port pour vérifier les deux
+                        self._check_signatures(decoded_payload, ip_src, src_port, dst_port, "TCP")
+                    except Exception as e:
+                        print(f"[DEBUG] Erreur analyse: {e}")
+                        pass 
+
+            # 4. Analyse UDP pour signatures
+            if UDP in packet:
+                src_port = packet[UDP].sport
+                dst_port = packet[UDP].dport
+                
+                if packet.haslayer(Raw):
+                    try:
+                        payload = packet[Raw].load.decode('utf-8', errors='ignore')
+                        decoded_payload = unquote(payload)
+                        # Vérification Signature UDP
+                        self._check_signatures(decoded_payload, ip_src, src_port, dst_port, "UDP")
+                    except Exception as e:
+                        # print(f"[DEBUG] Erreur analyse UDP: {e}")
+                        pass 
+
             # Journalisation (simplifiée pour éviter un journal trop volumineux)
             # self.log_manager.log(f"Trafic: {ip_src} -> {ip_dst}", event_type="TRAFFIC", component="IDS")
+
+    def _check_signatures(self, payload, ip_src, src_port, dst_port, protocol):
+        """Vérifie si le payload correspond à une signature connue."""
+        for sig in self.signatures:
+            # Vérification du port (si spécifié)
+            # On vérifie si le traffic concerne le port surveillé (en source ou destination)
+            if sig.get('port'):
+                if sig['port'] != src_port and sig['port'] != dst_port:
+                    continue
+                
+            # Vérification du protocole
+            if sig.get('protocol') and sig['protocol'].upper() != protocol:
+                continue
+                
+            # Vérification du pattern
+            if re.search(sig['pattern'], payload, re.IGNORECASE):
+                print(f"[DEBUG] !! MATCH SIGNATURE !! {sig['name']}")
+                self.alert_manager.generate_alert(
+                    f"Attaque détectée: {sig['name']} depuis {ip_src}. Pattern: {sig['pattern']}",
+                    event_type=f"Signature_Match_{sig['severity']}",
+                    component="IDS",
+                    source_ip=ip_src
+                )
+                break
 
     def _detect_port_scan(self, ip_src, port_dst):
         """Logique de détection de scan de ports."""
@@ -60,12 +134,13 @@ class IDS:
         
         self.port_scan_attempts[ip_src][port_dst] += 1
         
-        # Seuil simple: si une IP tente de se connecter à plus de 5 ports différents en peu de temps
-        if len(self.port_scan_attempts[ip_src]) > 5:
+        # Seuil simple: si une IP tente de se connecter à plus de 20 ports différents en peu de temps
+        if len(self.port_scan_attempts[ip_src]) > 20:
             self.alert_manager.generate_alert(
                 f"Scan de ports suspect détecté de {ip_src}. Tentatives sur {len(self.port_scan_attempts[ip_src])} ports.",
                 event_type="Port_Scan",
-                component="IDS"
+                component="IDS",
+                source_ip=ip_src
             )
             # Réinitialiser après alerte
             self.port_scan_attempts[ip_src] = {}

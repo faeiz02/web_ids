@@ -4,6 +4,7 @@
 {% block page_title %}Gestion des Alertes{% endblock %}
 
 {% block content %}
+
 <div class="page-content">
     <!-- Statistiques des Alertes -->
     <div class="grid grid-3" style="margin-bottom: 2rem;">
@@ -12,7 +13,8 @@
                 <div style="font-size: 2rem; color: var(--danger-color); margin-bottom: 0.5rem;">
                     <i class="fas fa-exclamation-triangle"></i>
                 </div>
-                <div style="font-size: 0.875rem; color: var(--text-tertiary); margin-bottom: 0.5rem;">Alertes Actives</div>
+                <div style="font-size: 0.875rem; color: var(--text-tertiary); margin-bottom: 0.5rem;">Alertes Actives
+                </div>
                 <div style="font-size: 1.75rem; font-weight: 600;" id="activeAlertsCount">0</div>
             </div>
         </div>
@@ -22,7 +24,8 @@
                 <div style="font-size: 2rem; color: var(--warning-color); margin-bottom: 0.5rem;">
                     <i class="fas fa-list"></i>
                 </div>
-                <div style="font-size: 0.875rem; color: var(--text-tertiary); margin-bottom: 0.5rem;">Total Alertes</div>
+                <div style="font-size: 0.875rem; color: var(--text-tertiary); margin-bottom: 0.5rem;">Total Alertes
+                </div>
                 <div style="font-size: 1.75rem; font-weight: 600;" id="totalAlertsCount">0</div>
             </div>
         </div>
@@ -37,6 +40,8 @@
             </div>
         </div>
     </div>
+
+
 
     <!-- Filtres -->
     <div class="card" style="margin-bottom: 2rem;">
@@ -124,7 +129,7 @@
             return;
         }
 
-        let html = '<div style="overflow-x: auto;"><table class="table"><thead><tr><th>Timestamp</th><th>Type</th><th>Description</th><th>Composant</th><th>Statut</th><th>Actions</th></tr></thead><tbody>';
+        let html = '<div style="overflow-x: auto;"><table class="table"><thead><tr><th>Timestamp</th><th>Source IP</th><th>Type</th><th>Description</th><th>Composant</th><th>Statut</th><th>Actions</th></tr></thead><tbody>';
 
         alerts.forEach(alert => {
             const date = new Date(alert.timestamp);
@@ -135,6 +140,7 @@
             html += `
                 <tr>
                     <td style="font-size: 0.85rem;">${timeStr}</td>
+                    <td style="font-weight: bold;">${alert.source_ip || 'N/A'}</td>
                     <td><span class="badge ${getBadgeClass(alert.event_type)}">${alert.event_type}</span></td>
                     <td style="max-width: 300px; word-wrap: break-word;">${alert.description}</td>
                     <td>${alert.component}</td>
@@ -206,5 +212,8 @@
         // Rafraîchir toutes les 10 secondes
         setInterval(loadAlerts, 10000);
     });
+
+
+
 </script>
 {% endblock %}

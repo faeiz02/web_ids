@@ -139,6 +139,24 @@ def perform_full_scan():
     return jsonify({'message': 'Scan lancé', 'target': target_range})
 
 
+@app.route('/api/scan/stop', methods=['POST'])
+def stop_scan():
+    """Arrête le scan en cours."""
+    global scan_in_progress, current_scan_status
+    
+    if not scan_in_progress:
+        return jsonify({'error': 'Aucun scan en cours'}), 400
+        
+    try:
+        scanner.stop_scan()
+        scan_in_progress = False
+        current_scan_status = "Scan arrêté par l'utilisateur"
+        log_manager.log("Scan arrêté par l'utilisateur via l'API", event_type="SCAN_ABORTED", component="Flask")
+        return jsonify({'message': 'Scan arrêté'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/scan/ports', methods=['POST'])
 def scan_ports():
     """Lance un scan de ports sur un hôte spécifique."""
@@ -295,23 +313,103 @@ def get_logs_count():
 
 @app.route('/api/visualization/alerts', methods=['GET'])
 def visualization_alerts():
-    """Génère un graphique des alertes par type."""
+    """Retourne les données des alertes par type pour Chart.js."""
     alerts = alert_manager.get_all_alerts()
-    alerts_data = [alert.to_dict() for alert in alerts]
     
-    # Convertir les dictionnaires en objets Alert pour la visualisation
-    chart_data = visualize_alerts_by_type(alerts_data)
+    # Compter les alertes par type
+    alert_counts = {}
+    for alert in alerts:
+        event_type = alert.event_type
+        alert_counts[event_type] = alert_counts.get(event_type, 0) + 1
     
-    return jsonify({'chart': chart_data})
+    # Préparer les données pour Chart.js
+    labels = list(alert_counts.keys())
+    data = list(alert_counts.values())
+    
+    return jsonify({
+        'labels': labels,
+        'data': data,
+        'total': len(alerts)
+    })
 
 
 @app.route('/api/visualization/traffic', methods=['GET'])
 def visualization_traffic():
-    """Génère un graphique du volume de trafic."""
+    """Retourne les données du volume de trafic pour Chart.js."""
     traffic_stats = ids.get_traffic_stats()
-    chart_data = visualize_traffic_volume(traffic_stats)
     
-    return jsonify({'chart': chart_data})
+    if not traffic_stats:
+        return jsonify({'labels': [], 'data': [], 'total': 0})
+    
+    # Convertir en Mo et préparer les données
+    labels = list(traffic_stats.keys())
+    data = [v / (1024 * 1024) for v in traffic_stats.values()]  # Convertir en Mo
+    
+    return jsonify({
+        'labels': labels,
+        'data': data,
+        'total': len(traffic_stats)
+    })
+
+
+@app.route('/api/visualization/timeline', methods=['GET'])
+def visualization_timeline():
+    """Retourne l'évolution des alertes dans le temps pour Chart.js."""
+    alerts = alert_manager.get_all_alerts()
+    
+    if not alerts:
+        return jsonify({'labels': [], 'data': [], 'total': 0})
+    
+    # Grouper les alertes par heure
+    from collections import defaultdict
+    hourly_counts = defaultdict(int)
+    
+    for alert in alerts:
+        # Extraire l'heure depuis le timestamp
+        timestamp = alert.timestamp
+        hour_key = timestamp.strftime('%Y-%m-%d %H:00')
+        hourly_counts[hour_key] += 1
+    
+    # Trier par heure
+    sorted_hours = sorted(hourly_counts.keys())
+    labels = [h.split(' ')[1] for h in sorted_hours]  # Garder seulement l'heure
+    data = [hourly_counts[h] for h in sorted_hours]
+    
+    return jsonify({
+        'labels': labels,
+        'data': data,
+        'total': len(alerts)
+    })
+
+
+@app.route('/api/visualization/severity', methods=['GET'])
+def visualization_severity():
+    """Retourne la distribution des alertes par sévérité pour Chart.js."""
+    alerts = alert_manager.get_all_alerts()
+    
+    # Extraire la sévérité depuis le type d'événement
+    severity_counts = {'HIGH': 0, 'MEDIUM': 0, 'LOW': 0, 'INFO': 0}
+    
+    for alert in alerts:
+        event_type = alert.event_type.upper()
+        if 'HIGH' in event_type or 'CRITICAL' in event_type:
+            severity_counts['HIGH'] += 1
+        elif 'MEDIUM' in event_type or 'WARNING' in event_type:
+            severity_counts['MEDIUM'] += 1
+        elif 'LOW' in event_type:
+            severity_counts['LOW'] += 1
+        else:
+            severity_counts['INFO'] += 1
+    
+    # Filtrer les sévérités avec 0 alertes
+    labels = [k for k, v in severity_counts.items() if v > 0]
+    data = [v for v in severity_counts.values() if v > 0]
+    
+    return jsonify({
+        'labels': labels,
+        'data': data,
+        'total': len(alerts)
+    })
 
 
 # ============================================================================

@@ -14,12 +14,13 @@ class Host:
 
 class Alert:
     """Représente une alerte de sécurité."""
-    def __init__(self, description, event_type="Intrusion", component="IDS"):
+    def __init__(self, description, event_type="Intrusion", component="IDS", source_ip=None):
         self.id = str(uuid.uuid4())
         self.timestamp = datetime.datetime.now()
         self.description = description
         self.event_type = event_type
         self.component = component
+        self.source_ip = source_ip
         self.acknowledged = False
 
     def to_dict(self):
@@ -29,12 +30,18 @@ class Alert:
             "description": self.description,
             "event_type": self.event_type,
             "component": self.component,
+            "source_ip": self.source_ip,
             "acknowledged": self.acknowledged
         }
 
     @classmethod
     def from_dict(cls, data):
-        alert = cls(data['description'], data['event_type'], data['component'])
+        alert = cls(
+            description=data['description'], 
+            event_type=data['event_type'], 
+            component=data['component'],
+            source_ip=data.get('source_ip') # Use .get() for backward compatibility
+        )
         alert.id = data['id']
         alert.timestamp = datetime.datetime.fromisoformat(data['timestamp'])
         alert.acknowledged = data['acknowledged']

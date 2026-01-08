@@ -1,0 +1,74 @@
+[
+    {
+        "id": "SIG-001",
+        "name": "SQL Injection Basic",
+        "pattern": "(' OR '1'='1|UNION SELECT|waitfor delay|SELECT.*FROM)",
+        "protocol": "TCP",
+        "port": 0,
+        "severity": "High"
+    },
+    {
+        "id": "SIG-002",
+        "name": "XSS Script Tag",
+        "pattern": "(<script>|javascript:alert|onerror=)",
+        "protocol": "TCP",
+        "port": 0,
+        "severity": "Medium"
+    },
+    {
+        "id": "SIG-003",
+        "name": "Path Traversal",
+        "pattern": "(\\.\\./\\.\\./|\\.\\.\\\\\\.\\.\\\\|/etc/passwd|c:\\\\boot.ini)",
+        "protocol": "TCP",
+        "port": 0,
+        "severity": "High"
+    },
+    {
+        "id": "SIG-004",
+        "name": "Command Injection / RCE",
+        "pattern": "(;|\\|\\|)\\s*(cat|ls|pwd|whoami|net user|ping|wget|curl)",
+        "protocol": "TCP",
+        "port": 0,
+        "severity": "Critical"
+    },
+    {
+        "id": "SIG-005",
+        "name": "Shellshock Vulnerability",
+        "pattern": "\\(\\) \\{ :; \\};",
+        "protocol": "TCP",
+        "port": 0,
+        "severity": "Critical"
+    },
+    {
+        "id": "SIG-006",
+        "name": "Sensitive File Access",
+        "pattern": "(\\.env|wp-config\\.php|id_rsa|\\.git/config)",
+        "protocol": "TCP",
+        "port": 0,
+        "severity": "High"
+    },
+    {
+        "id": "SIG-007",
+        "name": "Malicious Scanner User-Agent",
+        "pattern": "(sqlmap|nikto|nmap|wireshark|python-requests|curl/)",
+        "protocol": "TCP",
+        "port": 0,
+        "severity": "Low"
+    },
+    {
+        "id": "SIG-008",
+        "name": "Malware C2 Beacon",
+        "pattern": "C2_HEARTBEAT_REQUEST",
+        "protocol": "UDP",
+        "port": 0,
+        "severity": "Critical"
+    },
+    {
+        "id": "SIG-009",
+        "name": "Cleartext Password",
+        "pattern": "(PASS\\s+|password=|PWD=)",
+        "protocol": "TCP",
+        "port": 0,
+        "severity": "High"
+    }
+]

@@ -1,14 +1,19 @@
 <!DOCTYPE html>
 <html lang="fr">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Moniteur de Sécurité Réseau{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     {% block extra_css %}{% endblock %}
 </head>
+
 <body>
     <div class="app-container">
         <!-- Sidebar Navigation -->
@@ -19,34 +24,35 @@
                     <span>NetSecure</span>
                 </div>
             </div>
-            
+
             <ul class="nav-menu">
                 <li><a href="/" class="nav-link {% if request.path == '/' %}active{% endif %}">
-                    <i class="fas fa-home"></i>
-                    <span>Accueil</span>
-                </a></li>
+                        <i class="fas fa-home"></i>
+                        <span>Accueil</span>
+                    </a></li>
                 <li><a href="/dashboard" class="nav-link {% if request.path == '/dashboard' %}active{% endif %}">
-                    <i class="fas fa-chart-line"></i>
-                    <span>Tableau de Bord</span>
-                </a></li>
+                        <i class="fas fa-chart-line"></i>
+                        <span>Tableau de Bord</span>
+                    </a></li>
                 <li><a href="/scan" class="nav-link {% if request.path == '/scan' %}active{% endif %}">
-                    <i class="fas fa-network-wired"></i>
-                    <span>Scan Réseau</span>
-                </a></li>
+                        <i class="fas fa-network-wired"></i>
+                        <span>Scan Réseau</span>
+                    </a></li>
                 <li><a href="/alerts" class="nav-link {% if request.path == '/alerts' %}active{% endif %}">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <span>Alertes</span>
-                </a></li>
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <span>Alertes</span>
+                    </a></li>
                 <li><a href="/logs" class="nav-link {% if request.path == '/logs' %}active{% endif %}">
-                    <i class="fas fa-file-alt"></i>
-                    <span>Logs</span>
-                </a></li>
-                <li><a href="/visualization" class="nav-link {% if request.path == '/visualization' %}active{% endif %}">
-                    <i class="fas fa-chart-bar"></i>
-                    <span>Visualisations</span>
-                </a></li>
+                        <i class="fas fa-file-alt"></i>
+                        <span>Logs</span>
+                    </a></li>
+                <li><a href="/visualization"
+                        class="nav-link {% if request.path == '/visualization' %}active{% endif %}">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>Visualisations</span>
+                    </a></li>
             </ul>
-            
+
             <div class="sidebar-footer">
                 <div class="user-info">
                     <i class="fas fa-user-circle"></i>
@@ -54,7 +60,7 @@
                 </div>
             </div>
         </nav>
-        
+
         <!-- Main Content Area -->
         <div class="main-content">
             <!-- Top Bar -->
@@ -65,7 +71,7 @@
                     </button>
                     <h1 class="page-title">{% block page_title %}Moniteur de Sécurité Réseau{% endblock %}</h1>
                 </div>
-                
+
                 <div class="top-bar-right">
                     <div class="status-indicator">
                         <span class="status-dot" id="statusDot"></span>
@@ -80,24 +86,25 @@
                     </button>
                 </div>
             </header>
-            
+
             <!-- Page Content -->
             <main class="page-content">
                 {% block content %}{% endblock %}
             </main>
-            
+
             <!-- Footer -->
             <footer class="app-footer">
                 <p>&copy; 2024 Moniteur de Sécurité Réseau Python. Tous droits réservés.</p>
             </footer>
         </div>
     </div>
-    
+
     <!-- Toast Notifications -->
     <div class="toast-container" id="toastContainer"></div>
-    
+
     <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
     <script src="{{ url_for('static', filename='js/api.js') }}"></script>
     {% block extra_js %}{% endblock %}
 </body>
+
 </html>

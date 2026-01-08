@@ -100,9 +100,15 @@
                     </div>
                 </div>
 
-                <button type="submit" class="btn btn-primary btn-block" id="scanBtn" style="margin-top: 2rem;">
-                    <i class="fas fa-play"></i> Lancer le Scan
-                </button>
+                <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+                    <button type="submit" class="btn btn-primary btn-block" id="scanBtn">
+                        <i class="fas fa-play"></i> Lancer le Scan
+                    </button>
+                    <button type="button" class="btn btn-danger btn-block" id="stopBtn" onclick="handleStop()"
+                        style="display: none;">
+                        <i class="fas fa-stop"></i> Arrêter le Scan
+                    </button>
+                </div>
             </form>
         </div>
     </div>
@@ -218,7 +224,12 @@
     }
 
     // Initialiser l'affichage au chargement de la page
-    document.addEventListener('DOMContentLoaded', () => showScanType('full'));
+    document.addEventListener('DOMContentLoaded', () => {
+        showScanType('full');
+        // On page load, try to restore results if available, or check status
+        refreshResults();
+        pollScanStatus();
+    });
 
     // Fonction principale pour gérer la soumission du formulaire
     async function handleScan(event) {
@@ -257,27 +268,19 @@
             updateScanStatus(true, `Démarrage du scan ${currentScanType === 'full' ? 'Complet' : 'Manuel'} sur ${target}...`);
             document.getElementById('scanBtn').disabled = true;
 
-            // Appel personnalisé de l'API car nous avons changé la signature (ajout de scan_method)
-            // L'API générique (api.js) ne connait peut-être pas scan_method dans performFullScan...
-            // Attendons voir api.js.
-            // Si api.js n'est pas modifié, il faut vérifier comment il passe les arguments.
-
-            // Pour l'instant, modifions juste l'appel pour passer un objet ou les arguments, 
-            // Mais api.js est probablement un wrapper statique.
-
-            // On va assumer que API.scanner.performFullScan prend (target, ports, detection, speed, format)
-            // On va tricher et passer scan_method comme dernier argument si possible, ou modifier api.js.
-            // Le plus simple : appeler fetch directement ici pour être sûr.
+            // Clear previous results and show loading state with a nice spinner
+            document.getElementById('resultsContainer').innerHTML = `
+                <div style="text-align: center; padding: 3rem;">
+                    <i class="fas fa-circle-notch fa-spin" style="font-size: 3rem; color: var(--primary-color); margin-bottom: 1rem;"></i>
+                    <p style="color: var(--text-secondary); font-size: 1.1rem;">Scan en cours...</p>
+                    <p style="color: var(--text-tertiary);">Analyse de ${target}</p>
+                </div>
+            `;
 
             const endpoint = currentScanType === 'full' ? '/api/scan/full' : '/api/scan/ports';
             const payload = {
                 ports: ports,
                 scan_method: scan_method
-                // detection, format sont gérés ? App.py ne lit pas detection/format dans perform_full_scan ?
-                // Regardons app.py : il lit target_range, ports, scan_method.
-                // Il ne lit PAS detection, ni format pour le full scan !?
-                // Ah, app.py perform_full_scan appelle scanner.perform_full_network_scan avec juste target et ports (et maintenant speed/method).
-                // Il semble que app.py ignore 'detection' et 'format' pour le moment dans l'endpoint full scan.
             };
 
             if (currentScanType === 'full') {
@@ -300,47 +303,81 @@
                 Toast.success('Scan lancé avec succès');
                 pollScanStatus();
             } else {
-                throw new Error(data.error || 'Erreur inconnue');
+                // If the server says "Scan already in progress" (400), we should probably just poll
+                if (response.status === 400 && data.error === 'Un scan est déjà en cours') {
+                    Toast.info('Un scan est déjà en cours, récupération du statut...');
+                    pollScanStatus();
+                } else {
+                    throw new Error(data.error || 'Erreur inconnue');
+                }
             }
 
         } catch (error) {
             Toast.error('Erreur lors du scan: ' + (error.message || 'Problème de connexion'));
-            updateScanStatus(false, 'Erreur');
-            document.getElementById('scanBtn').disabled = false;
+            // Only reset status/button if we really failed to start or connect
+            // If it was just a polling error later, pollScanStatus handles it.
+            // But here we might be in the 'start scan' phase. 
+            // If error is "Scan already in progress", we shouldn't reset to error.
+            if (error.message !== 'Un scan est déjà en cours') {
+                updateScanStatus(false, 'Erreur');
+                // Don't clear the "Loading" state if we want to show error? 
+                // Restore empty state or show error in results?
+                document.getElementById('resultsContainer').innerHTML = `
+                    <p style="text-align: center; color: var(--danger-color); padding: 2rem;">
+                        <i class="fas fa-exclamation-triangle" style="font-size: 2rem; display: block; margin-bottom: 1rem;"></i>
+                        Erreur: ${error.message}
+                    </p>
+                `;
+            }
         }
     }
 
-    // Poll scan status recursively
+    async function handleStop() {
+        if (!confirm('Voulez-vous vraiment arrêter le scan en cours ?')) return;
+
+        try {
+            const response = await fetch('/api/scan/stop', { method: 'POST' });
+            const data = await response.json();
+
+            if (response.ok) {
+                Toast.info('Arrêt du scan demandé...');
+                // The polling will pick up the status change eventually, but let's force UI update slightly
+                document.getElementById('stopBtn').disabled = true;
+                document.getElementById('stopBtn').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Arrêt...';
+            } else {
+                Toast.error('Erreur: ' + data.error);
+            }
+        } catch (error) {
+            console.error('Stop error:', error);
+            Toast.error('Erreur de connexion');
+        }
+    }
+
     async function pollScanStatus() {
         try {
             const status = await API.scanner.getStatus();
 
             if (status.in_progress) {
-                // Update status text if available
-                if (status.status) {
-                    updateScanStatus(true, status.status);
-                }
+                updateScanStatus(true, status.status || 'En cours');
                 // Continue polling after 1 second
                 setTimeout(pollScanStatus, 1000);
             } else {
                 // Scan finished
-                // Check if it was an error based on status text or just assume success if not in progress?
-                // The backend sets current_scan_status = "Erreur: ..." on exception.
-                if (status.status && status.status.startsWith('Erreur')) {
+                if (status.status && (status.status.startsWith('Erreur') || status.status.includes('arrêté'))) {
                     updateScanStatus(false, status.status);
-                    Toast.error(status.status);
+                    if (status.status.includes('arrêté')) {
+                        Toast.info('Scan arrêté');
+                    } else {
+                        Toast.error(status.status);
+                    }
                 } else {
                     updateScanStatus(false, 'Scan terminé');
-                    Toast.info('Scan terminé');
+                    Toast.success('Scan terminé');
                 }
-
                 refreshResults();
-                document.getElementById('scanBtn').disabled = false;
             }
         } catch (error) {
             console.error("Polling error", error);
-            // Don't stop polling immediately on one error, maybe network glitch? 
-            // But if it persists we should stop. For now, let's retry.
             setTimeout(pollScanStatus, 2000);
         }
     }
@@ -348,22 +385,36 @@
     // --- Fonctions utilitaires (conservées) ---
 
     // Mettre à jour le statut du scan
+    // Mettre à jour le statut du scan et les boutons
     function updateScanStatus(inProgress, message) {
         const indicator = document.getElementById('scanStatusIndicator');
         const statusText = document.getElementById('scanStatusText');
         const statusDetail = document.getElementById('scanStatusDetail');
+        const scanBtn = document.getElementById('scanBtn');
+        const stopBtn = document.getElementById('stopBtn');
 
         if (inProgress) {
             indicator.style.backgroundColor = 'var(--warning-color)';
             indicator.style.animation = 'pulse 1s infinite';
             statusText.textContent = 'En cours';
-            statusDetail.textContent = message;
+
+            // Toggle buttons
+            scanBtn.style.display = 'none';
+            stopBtn.style.display = 'block';
+            stopBtn.disabled = false;
+            stopBtn.innerHTML = '<i class="fas fa-stop"></i> Arrêter le Scan';
+
         } else {
             indicator.style.backgroundColor = 'var(--success-color)';
             indicator.style.animation = 'none';
             statusText.textContent = 'Prêt';
-            statusDetail.textContent = message;
+
+            // Toggle buttons
+            scanBtn.style.display = 'block';
+            scanBtn.disabled = false;
+            stopBtn.style.display = 'none';
         }
+        statusDetail.textContent = message;
     }
 
     // Charger et afficher les résultats

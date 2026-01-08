@@ -3,129 +3,516 @@
 {% block title %}Visualisation - Moniteur de Sécurité Réseau{% endblock %}
 {% block page_title %}Visualisation des Événements{% endblock %}
 
+{% block extra_css %}
+<style>
+    .viz-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+        gap: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .viz-card {
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+        border-radius: 16px;
+        padding: 1.5rem;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .viz-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15);
+    }
+
+    .viz-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .viz-title {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .viz-title i {
+        font-size: 1.5rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    .viz-stats {
+        display: flex;
+        gap: 1rem;
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+    }
+
+    .stat-badge {
+        background: rgba(102, 126, 234, 0.1);
+        padding: 0.25rem 0.75rem;
+        border-radius: 12px;
+        font-weight: 500;
+    }
+
+    .chart-container {
+        position: relative;
+        height: 300px;
+        margin-top: 1rem;
+    }
+
+    .refresh-btn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.875rem;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .refresh-btn:hover {
+        transform: scale(1.05);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .refresh-btn i {
+        transition: transform 0.3s ease;
+    }
+
+    .refresh-btn:hover i {
+        transform: rotate(180deg);
+    }
+
+    .loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 300px;
+        color: var(--text-tertiary);
+    }
+
+    .loading i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        from {
+            transform: rotate(0deg);
+        }
+
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    .info-section {
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+        border-radius: 16px;
+        padding: 2rem;
+        margin-top: 2rem;
+        border: 1px solid rgba(102, 126, 234, 0.2);
+    }
+
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 2rem;
+        margin-top: 1.5rem;
+    }
+
+    .info-item h4 {
+        color: var(--text-primary);
+        margin-bottom: 0.5rem;
+        font-size: 1.1rem;
+    }
+
+    .info-item p {
+        color: var(--text-secondary);
+        line-height: 1.6;
+        font-size: 0.95rem;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="page-content">
-    <!-- Graphiques -->
-    <div class="grid grid-2" style="margin-bottom: 2rem;">
-        <!-- Graphique des Alertes -->
-        <div class="card">
-            <div class="card-header">
-                <h3 class="card-title">
+    <!-- Graphiques Principaux -->
+    <div class="viz-grid">
+        <!-- Alertes par Type -->
+        <div class="viz-card">
+            <div class="viz-header">
+                <div class="viz-title">
                     <i class="fas fa-chart-bar"></i>
-                    Distribution des Alertes par Type
-                </h3>
-                <button class="btn btn-secondary btn-small" onclick="refreshAlertsChart()">
+                    <span>Alertes par Type</span>
+                </div>
+                <button class="refresh-btn" onclick="loadAlertsChart()">
                     <i class="fas fa-sync-alt"></i>
+                    <span>Rafraîchir</span>
                 </button>
             </div>
-            <div class="card-body">
-                <div id="alertsChartContainer" style="text-align: center; padding: 2rem; color: var(--text-tertiary);">
-                    <i class="fas fa-spinner" style="font-size: 2rem; animation: spin 1s linear infinite;"></i>
-                    <p>Chargement du graphique...</p>
-                </div>
+            <div class="viz-stats">
+                <span class="stat-badge" id="alertsTotal">Total: 0</span>
+            </div>
+            <div class="chart-container">
+                <canvas id="alertsChart"></canvas>
             </div>
         </div>
 
-        <!-- Graphique du Trafic -->
-        <div class="card">
-            <div class="card-header">
-                <h3 class="card-title">
-                    <i class="fas fa-chart-bar"></i>
-                    Volume de Trafic par Hôte
-                </h3>
-                <button class="btn btn-secondary btn-small" onclick="refreshTrafficChart()">
+        <!-- Volume de Trafic -->
+        <div class="viz-card">
+            <div class="viz-header">
+                <div class="viz-title">
+                    <i class="fas fa-network-wired"></i>
+                    <span>Volume de Trafic</span>
+                </div>
+                <button class="refresh-btn" onclick="loadTrafficChart()">
                     <i class="fas fa-sync-alt"></i>
+                    <span>Rafraîchir</span>
                 </button>
             </div>
-            <div class="card-body">
-                <div id="trafficChartContainer" style="text-align: center; padding: 2rem; color: var(--text-tertiary);">
-                    <i class="fas fa-spinner" style="font-size: 2rem; animation: spin 1s linear infinite;"></i>
-                    <p>Chargement du graphique...</p>
+            <div class="viz-stats">
+                <span class="stat-badge" id="trafficTotal">Sources: 0</span>
+            </div>
+            <div class="chart-container">
+                <canvas id="trafficChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Timeline des Alertes -->
+        <div class="viz-card">
+            <div class="viz-header">
+                <div class="viz-title">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Évolution Temporelle</span>
                 </div>
+                <button class="refresh-btn" onclick="loadTimelineChart()">
+                    <i class="fas fa-sync-alt"></i>
+                    <span>Rafraîchir</span>
+                </button>
+            </div>
+            <div class="viz-stats">
+                <span class="stat-badge" id="timelineTotal">Alertes: 0</span>
+            </div>
+            <div class="chart-container">
+                <canvas id="timelineChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Distribution par Sévérité -->
+        <div class="viz-card">
+            <div class="viz-header">
+                <div class="viz-title">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span>Sévérité des Alertes</span>
+                </div>
+                <button class="refresh-btn" onclick="loadSeverityChart()">
+                    <i class="fas fa-sync-alt"></i>
+                    <span>Rafraîchir</span>
+                </button>
+            </div>
+            <div class="viz-stats">
+                <span class="stat-badge" id="severityTotal">Total: 0</span>
+            </div>
+            <div class="chart-container">
+                <canvas id="severityChart"></canvas>
             </div>
         </div>
     </div>
 
-    <!-- Informations Supplémentaires -->
-    <div class="card">
-        <div class="card-header">
-            <h3 class="card-title">
-                <i class="fas fa-info-circle"></i>
-                À Propos des Visualisations
-            </h3>
-        </div>
-        <div class="card-body">
-            <div class="grid grid-2">
-                <div>
-                    <h4 style="margin-bottom: 0.5rem; color: var(--text-primary);">Distribution des Alertes</h4>
-                    <p style="color: var(--text-secondary); font-size: 0.9rem;">
-                        Ce graphique affiche le nombre d'alertes par type d'événement détecté par le système IDS. 
-                        Cela vous aide à identifier les types de menaces les plus fréquentes sur votre réseau.
-                    </p>
-                </div>
-                <div>
-                    <h4 style="margin-bottom: 0.5rem; color: var(--text-primary);">Volume de Trafic</h4>
-                    <p style="color: var(--text-secondary); font-size: 0.9rem;">
-                        Ce graphique montre le volume de trafic réseau par adresse IP source. 
-                        Un volume anormalement élevé peut indiquer une attaque DoS ou un comportement suspect.
-                    </p>
-                </div>
+    <!-- Informations -->
+    <div class="info-section">
+        <h3 style="color: var(--text-primary); margin-bottom: 0.5rem;">
+            <i class="fas fa-info-circle"></i> À Propos des Visualisations
+        </h3>
+        <div class="info-grid">
+            <div class="info-item">
+                <h4>📊 Alertes par Type</h4>
+                <p>Affiche la distribution des alertes détectées par l'IDS selon leur type d'événement. Identifiez
+                    rapidement les menaces les plus fréquentes.</p>
+            </div>
+            <div class="info-item">
+                <h4>🌐 Volume de Trafic</h4>
+                <p>Montre le volume de données (en Mo) par adresse IP source. Un pic anormal peut indiquer une attaque
+                    DoS ou un comportement suspect.</p>
+            </div>
+            <div class="info-item">
+                <h4>📈 Évolution Temporelle</h4>
+                <p>Visualise l'évolution du nombre d'alertes au fil du temps. Détectez les périodes d'activité suspecte
+                    intense.</p>
+            </div>
+            <div class="info-item">
+                <h4>⚠️ Sévérité des Alertes</h4>
+                <p>Répartition des alertes selon leur niveau de gravité (HIGH, MEDIUM, LOW, INFO). Priorisez votre
+                    réponse aux incidents.</p>
             </div>
         </div>
     </div>
 </div>
 
 <script>
-    // Charger le graphique des alertes
+    let alertsChartInstance = null;
+    let trafficChartInstance = null;
+    let timelineChartInstance = null;
+    let severityChartInstance = null;
+
+    // Couleurs vibrantes et modernes
+    const colors = {
+        primary: ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#43e97b', '#fa709a', '#fee140', '#30cfd0'],
+        gradient: {
+            purple: ['rgba(102, 126, 234, 0.8)', 'rgba(118, 75, 162, 0.8)'],
+            blue: ['rgba(79, 172, 254, 0.8)', 'rgba(0, 242, 254, 0.8)'],
+            green: ['rgba(67, 233, 123, 0.8)', 'rgba(56, 249, 215, 0.8)'],
+            pink: ['rgba(250, 112, 154, 0.8)', 'rgba(254, 225, 64, 0.8)']
+        },
+        severity: {
+            HIGH: '#ff6b6b',
+            MEDIUM: '#feca57',
+            LOW: '#48dbfb',
+            INFO: '#1dd1a1'
+        }
+    };
+
+    // Configuration commune pour tous les graphiques
+    const commonOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                labels: {
+                    color: '#e0e0e0',
+                    font: { size: 12, family: 'Inter' }
+                }
+            },
+            tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                titleColor: '#fff',
+                bodyColor: '#fff',
+                borderColor: 'rgba(102, 126, 234, 0.5)',
+                borderWidth: 1,
+                padding: 12,
+                displayColors: true
+            }
+        }
+    };
+
+    // Charger le graphique des alertes par type
     async function loadAlertsChart() {
         try {
             const response = await API.visualization.getAlertsChart();
-            const container = document.getElementById('alertsChartContainer');
-            
-            if (response.chart) {
-                container.innerHTML = `<img src="${response.chart}" style="max-width: 100%; height: auto; border-radius: 6px;">`;
-            } else {
-                container.innerHTML = '<p style="color: var(--text-tertiary); padding: 2rem;">Aucune donnée à visualiser</p>';
+            document.getElementById('alertsTotal').textContent = `Total: ${response.total}`;
+
+            const ctx = document.getElementById('alertsChart').getContext('2d');
+
+            if (alertsChartInstance) {
+                alertsChartInstance.destroy();
             }
+
+            alertsChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: response.labels,
+                    datasets: [{
+                        label: 'Nombre d\'alertes',
+                        data: response.data,
+                        backgroundColor: colors.primary,
+                        borderColor: colors.primary.map(c => c.replace('0.8', '1')),
+                        borderWidth: 2,
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    ...commonOptions,
+                    indexAxis: 'y',
+                    scales: {
+                        x: {
+                            ticks: { color: '#e0e0e0' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        },
+                        y: {
+                            ticks: { color: '#e0e0e0' },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+
+            Toast.success('Graphique des alertes rafraîchi');
         } catch (error) {
-            console.error('Erreur lors du chargement du graphique des alertes:', error);
-            document.getElementById('alertsChartContainer').innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-circle"></i> Erreur lors du chargement du graphique</div>';
+            console.error('Erreur:', error);
+            Toast.error('Erreur lors du chargement du graphique');
         }
     }
 
-    // Charger le graphique du trafic
+    // Charger le graphique du volume de trafic
     async function loadTrafficChart() {
         try {
             const response = await API.visualization.getTrafficChart();
-            const container = document.getElementById('trafficChartContainer');
-            
-            if (response.chart) {
-                container.innerHTML = `<img src="${response.chart}" style="max-width: 100%; height: auto; border-radius: 6px;">`;
-            } else {
-                container.innerHTML = '<p style="color: var(--text-tertiary); padding: 2rem;">Aucune donnée à visualiser</p>';
+            document.getElementById('trafficTotal').textContent = `Sources: ${response.total}`;
+
+            const ctx = document.getElementById('trafficChart').getContext('2d');
+
+            if (trafficChartInstance) {
+                trafficChartInstance.destroy();
             }
+
+            trafficChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: response.labels,
+                    datasets: [{
+                        label: 'Volume (Mo)',
+                        data: response.data,
+                        backgroundColor: colors.gradient.blue[0],
+                        borderColor: colors.gradient.blue[1],
+                        borderWidth: 2,
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    ...commonOptions,
+                    scales: {
+                        x: {
+                            ticks: { color: '#e0e0e0' },
+                            grid: { display: false }
+                        },
+                        y: {
+                            ticks: { color: '#e0e0e0' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        }
+                    }
+                }
+            });
+
+            Toast.success('Graphique du trafic rafraîchi');
         } catch (error) {
-            console.error('Erreur lors du chargement du graphique du trafic:', error);
-            document.getElementById('trafficChartContainer').innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-circle"></i> Erreur lors du chargement du graphique</div>';
+            console.error('Erreur:', error);
+            Toast.error('Erreur lors du chargement du graphique');
         }
     }
 
-    // Rafraîchir le graphique des alertes
-    async function refreshAlertsChart() {
-        await loadAlertsChart();
-        Toast.info('Graphique rafraîchi');
+    // Charger le graphique de la timeline
+    async function loadTimelineChart() {
+        try {
+            const response = await API.visualization.getTimelineChart();
+            document.getElementById('timelineTotal').textContent = `Alertes: ${response.total}`;
+
+            const ctx = document.getElementById('timelineChart').getContext('2d');
+
+            if (timelineChartInstance) {
+                timelineChartInstance.destroy();
+            }
+
+            timelineChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: response.labels,
+                    datasets: [{
+                        label: 'Alertes par heure',
+                        data: response.data,
+                        borderColor: colors.gradient.green[0],
+                        backgroundColor: colors.gradient.green[0].replace('0.8', '0.2'),
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 5,
+                        pointHoverRadius: 7,
+                        pointBackgroundColor: colors.gradient.green[1]
+                    }]
+                },
+                options: {
+                    ...commonOptions,
+                    scales: {
+                        x: {
+                            ticks: { color: '#e0e0e0' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        },
+                        y: {
+                            ticks: { color: '#e0e0e0' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        }
+                    }
+                }
+            });
+
+            Toast.success('Timeline rafraîchie');
+        } catch (error) {
+            console.error('Erreur:', error);
+            Toast.error('Erreur lors du chargement de la timeline');
+        }
     }
 
-    // Rafraîchir le graphique du trafic
-    async function refreshTrafficChart() {
-        await loadTrafficChart();
-        Toast.info('Graphique rafraîchi');
+    // Charger le graphique de sévérité
+    async function loadSeverityChart() {
+        try {
+            const response = await API.visualization.getSeverityChart();
+            document.getElementById('severityTotal').textContent = `Total: ${response.total}`;
+
+            const ctx = document.getElementById('severityChart').getContext('2d');
+
+            if (severityChartInstance) {
+                severityChartInstance.destroy();
+            }
+
+            const severityColors = response.labels.map(label => colors.severity[label] || '#888');
+
+            severityChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: response.labels,
+                    datasets: [{
+                        data: response.data,
+                        backgroundColor: severityColors,
+                        borderColor: '#1a1a2e',
+                        borderWidth: 3,
+                        hoverOffset: 10
+                    }]
+                },
+                options: {
+                    ...commonOptions,
+                    cutout: '60%'
+                }
+            });
+
+            Toast.success('Graphique de sévérité rafraîchi');
+        } catch (error) {
+            console.error('Erreur:', error);
+            Toast.error('Erreur lors du chargement du graphique');
+        }
     }
 
-    // Charger les graphiques au chargement de la page
+    // Charger tous les graphiques au démarrage
     document.addEventListener('DOMContentLoaded', () => {
         loadAlertsChart();
         loadTrafficChart();
+        loadTimelineChart();
+        loadSeverityChart();
+
+        // Auto-refresh toutes les 30 secondes
+        setInterval(() => {
+            loadAlertsChart();
+            loadTrafficChart();
+            loadTimelineChart();
+            loadSeverityChart();
+        }, 30000);
     });
 </script>
 {% endblock %}

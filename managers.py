@@ -33,9 +33,12 @@ class LogManager:
                 # Lire les lignes en sens inverse pour obtenir les plus récentes
                 for line in reversed(f.readlines()):
                     if line.strip():
-                        logs.append(Log(**json.loads(line)).to_dict())
-                        if len(logs) >= limit:
-                            break
+                        try:
+                            logs.append(Log(**json.loads(line)).to_dict())
+                            if len(logs) >= limit:
+                                break
+                        except json.JSONDecodeError:
+                            continue # Ignorer les lignes corrompues
         except FileNotFoundError:
             pass
         return logs
@@ -77,17 +80,18 @@ class AlertManager:
             for alert in self.alerts:
                 f.write(json.dumps(alert.to_dict()) + '\n')
 
-    def generate_alert(self, description, event_type="Intrusion", component="IDS"):
+    def generate_alert(self, description, event_type="Intrusion", component="IDS", source_ip=None):
         """Génère et enregistre une nouvelle alerte."""
-        new_alert = Alert(description, event_type, component)
+        new_alert = Alert(description, event_type, component, source_ip)
         self.alerts.append(new_alert)
         self._save_alerts()
         print(f"!!! NOUVELLE ALERTE !!!: {str(new_alert)}")
         return new_alert
 
     def get_active_alerts(self):
-        """Retourne les alertes non acquittées."""
-        return [alert for alert in self.alerts if not alert.acknowledged]
+        """Retourne les alertes non acquittées (plus récentes en premier)."""
+        active = [alert for alert in self.alerts if not alert.acknowledged]
+        return active[::-1]
 
     def acknowledge_alert(self, alert_id):
         """Acquitte une alerte par son ID."""
@@ -99,5 +103,5 @@ class AlertManager:
         return False
 
     def get_all_alerts(self):
-        """Retourne toutes les alertes."""
-        return self.alerts
+        """Retourne toutes les alertes (plus récentes en premier)."""
+        return self.alerts[::-1]

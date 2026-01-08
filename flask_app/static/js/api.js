@@ -31,12 +31,12 @@ const API = {
                         format: format
                     })
                 });
-                
+
                 if (!response.ok) {
                     const error = await response.json();
                     throw new Error(error.error || 'Erreur lors du scan');
                 }
-                
+
                 return await response.json();
             } catch (error) {
                 console.error('Erreur API performFullScan:', error);
@@ -65,12 +65,12 @@ const API = {
                         format: format
                     })
                 });
-                
+
                 if (!response.ok) {
                     const error = await response.json();
                     throw new Error(error.error || 'Erreur lors du scan');
                 }
-                
+
                 return await response.json();
             } catch (error) {
                 console.error('Erreur API scanPorts:', error);
@@ -97,15 +97,15 @@ const API = {
         getResults: async () => {
             try {
                 const response = await fetch(`${API_BASE_URL}/api/scan/results`);
-                
+
                 if (response.status === 404) {
                     return null; // Aucun résultat disponible
                 }
-                
+
                 if (!response.ok) {
                     throw new Error('Erreur lors de la récupération des résultats');
                 }
-                
+
                 return await response.json();
             } catch (error) {
                 console.error('Erreur API getResults:', error);
@@ -128,12 +128,12 @@ const API = {
                         filename: filename
                     })
                 });
-                
+
                 if (!response.ok) {
                     const error = await response.json();
                     throw new Error(error.error || 'Erreur lors de l\'export');
                 }
-                
+
                 return await response.json();
             } catch (error) {
                 console.error('Erreur API exportResults:', error);
@@ -183,12 +183,12 @@ const API = {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ interface: interface })
                 });
-                
+
                 if (!response.ok) {
                     const error = await response.json();
                     throw new Error(error.error || 'Erreur lors du démarrage de l\'IDS');
                 }
-                
+
                 return await response.json();
             } catch (error) {
                 console.error('Erreur API IDS start:', error);
@@ -205,12 +205,12 @@ const API = {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 });
-                
+
                 if (!response.ok) {
                     const error = await response.json();
                     throw new Error(error.error || 'Erreur lors de l\'arrêt de l\'IDS');
                 }
-                
+
                 return await response.json();
             } catch (error) {
                 console.error('Erreur API IDS stop:', error);
@@ -259,12 +259,12 @@ const API = {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 });
-                
+
                 if (!response.ok) {
                     const error = await response.json();
                     throw new Error(error.error || 'Erreur lors de l\'acquittement');
                 }
-                
+
                 return await response.json();
             } catch (error) {
                 console.error('Erreur API alerts acknowledge:', error);
@@ -344,6 +344,32 @@ const API = {
                 return await response.json();
             } catch (error) {
                 console.error('Erreur API visualization traffic:', error);
+                throw error;
+            }
+        },
+
+        /**
+         * Récupère les données pour le graphique de la timeline
+         */
+        getTimelineChart: async () => {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/visualization/timeline`);
+                return await response.json();
+            } catch (error) {
+                console.error('Erreur API visualization timeline:', error);
+                throw error;
+            }
+        },
+
+        /**
+         * Récupère les données pour le graphique de sévérité
+         */
+        getSeverityChart: async () => {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/visualization/severity`);
+                return await response.json();
+            } catch (error) {
+                console.error('Erreur API visualization severity:', error);
                 throw error;
             }
         }

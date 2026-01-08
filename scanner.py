@@ -1,5 +1,6 @@
 import nmap
 import json
+import concurrent.futures
 from models import Host
 from managers import LogManager
 
@@ -12,6 +13,17 @@ class NetworkScanner:
         self.nm = nmap.PortScanner()
         self.log_manager = log_manager
         self.active_hosts = {} # {ip_address: Host object}
+        self.current_executor = None
+        self.stop_event = concurrent.futures.Future() # Using a Future as a flag or simple Event wrapper
+        self.stop_requested = False
+
+    def stop_scan(self):
+        """Arrête le scan en cours."""
+        self.stop_requested = True
+        if self.current_executor:
+            # Shutdown without waiting for pending futures
+            self.current_executor.shutdown(wait=False, cancel_futures=True)
+            self.log_manager.log("Demande d'arrêt du scan reçue.", event_type="SCAN_ABORTED", component="NetworkScanner")
 
     def _log_scan_start(self, scan_type, targets, options=None):
         """Journalise le début d'un scan."""
@@ -168,9 +180,12 @@ class NetworkScanner:
         options = {'ports': ports, 'detection': detection, 'speed': speed, 'method': scan_method}
         self._log_scan_start("Port/Service Scan", host_ip, options)
         
+        # Use a local nmap instance for thread safety during parallel scans
+        nm = nmap.PortScanner()
+        
         try:
             args = self._build_nmap_arguments('ports', ports=ports, detection=detection, speed=speed, scan_method=scan_method)
-            self.nm.scan(hosts=host_ip, arguments=args)
+            nm.scan(hosts=host_ip, arguments=args)
         except nmap.PortScannerError as e:
             self.log_manager.log(
                 f"Erreur Nmap lors du scan de ports: {e}", 
@@ -179,14 +194,15 @@ class NetworkScanner:
             )
             return {}
 
-        if host_ip in self.nm.all_hosts() and 'tcp' in self.nm[host_ip]:
+        if host_ip in nm.all_hosts() and 'tcp' in nm[host_ip]:
+            # Update shared state appropriately - protected by GIL for dict operations, and we are working on distinct keys per thread usually
             if host_ip not in self.active_hosts:
-                self.active_hosts[host_ip] = Host(host_ip, self.nm[host_ip].hostname())
+                self.active_hosts[host_ip] = Host(host_ip, nm[host_ip].hostname())
 
             host = self.active_hosts[host_ip]
             open_ports_count = 0
             
-            for port, data in self.nm[host_ip]['tcp'].items():
+            for port, data in nm[host_ip]['tcp'].items():
                 if data['state'] == 'open':
                     service = data.get('name', 'unknown')
                     version = data.get('version', 'N/A')
@@ -209,8 +225,8 @@ class NetworkScanner:
                     )
             
             # Détection OS si demandée
-            if detection == 'services' and 'osmatch' in self.nm[host_ip]:
-                os_matches = self.nm[host_ip]['osmatch']
+            if detection == 'services' and 'osmatch' in nm[host_ip]:
+                os_matches = nm[host_ip]['osmatch']
                 if os_matches:
                     host.os_info = os_matches[0].get('name', 'Unknown')
                     self.log_manager.log(
@@ -265,12 +281,42 @@ class NetworkScanner:
             )
             return self._format_results({}, output_format)
 
-        # 2. Scan de ports et services sur chaque hôte actif
+        # 2. Scan de ports et services sur chaque hôte actif (PARALLEL)
         scan_results = {}
+        self.stop_requested = False
+        
+        # Use ThreadPoolExecutor to scan multiple hosts simultaneously
+        # Increased max_workers to 30 for faster parallel scanning
+        try:
+            self.current_executor = concurrent.futures.ThreadPoolExecutor(max_workers=30)
+            with self.current_executor as executor:
+                future_to_ip = {}
+                for ip in active_hosts:
+                    if self.stop_requested:
+                        break
+                    future_to_ip[executor.submit(self.scan_ports_and_services, ip, ports, detection, speed, scan_method)] = ip
+                
+                for future in concurrent.futures.as_completed(future_to_ip):
+                    if self.stop_requested:
+                        break
+                    ip = future_to_ip[future]
+                    try:
+                        future.result()
+                    except concurrent.futures.CancelledError:
+                        pass # Scan was cancelled
+                    except Exception as exc:
+                        self.log_manager.log(f"Scan generated an exception for {ip}: {exc}", event_type="ERROR", component="NetworkScanner")
+        finally:
+            self.current_executor = None
+
+        if self.stop_requested:
+            self.log_manager.log("Scan complet arrêté par l'utilisateur.", event_type="SCAN_ABORTED", component="NetworkScanner")
+            # Return partial results? Or empty? Let's return partial.
+            # But active_hosts might be partially updated.
+
+
+        # Collect results
         for ip, host in active_hosts.items():
-            self.scan_ports_and_services(ip, ports, detection=detection, speed=speed, scan_method=scan_method)
-            
-            # Collecter les résultats pour le formatage
             scan_results[ip] = {
                 'hostname': host.hostname,
                 'state': 'up',
