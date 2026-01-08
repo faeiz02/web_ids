@@ -1,4 +1,4 @@
-from scapy.all import sniff, IP, TCP, UDP, Raw
+from scapy.all import sniff, IP, TCP, UDP, ICMP, Raw
 from managers import AlertManager, LogManager
 import threading
 import time
@@ -20,6 +20,8 @@ class IDS:
         self.port_scan_attempts = {} # {ip_src: {port: count}}
         self.traffic_volume = {} # {ip_src: bytes_count}
         self.volume_threshold = 10000000 # 10MB de trafic comme seuil simple pour DoS
+        self.ssh_attempts = {} # {ip_src: count} - Pour détecter SSH brute force
+        self.icmp_packets = {} # {ip_src: count} - Pour détecter ICMP flood
         self.signatures = self._load_signatures()
 
     def _load_signatures(self, filepath="signatures.json"):
@@ -66,6 +68,9 @@ class IDS:
 
                 if packet[TCP].flags == 'S': # SYN packet - début de connexion
                     self._detect_port_scan(ip_src, dst_port)
+                    # Détection SSH brute force
+                    if dst_port == 22:
+                        self._detect_ssh_bruteforce(ip_src)
                 
                 # 3. Détection par signature (3.2.3)
                 if packet.haslayer(Raw):
@@ -93,6 +98,10 @@ class IDS:
                     except Exception as e:
                         # print(f"[DEBUG] Erreur analyse UDP: {e}")
                         pass 
+
+            # 5. Détection ICMP Flood
+            if ICMP in packet:
+                self._detect_icmp_flood(ip_src)
 
             # Journalisation (simplifiée pour éviter un journal trop volumineux)
             # self.log_manager.log(f"Trafic: {ip_src} -> {ip_dst}", event_type="TRAFFIC", component="IDS")
@@ -135,7 +144,7 @@ class IDS:
         self.port_scan_attempts[ip_src][port_dst] += 1
         
         # Seuil simple: si une IP tente de se connecter à plus de 20 ports différents en peu de temps
-        if len(self.port_scan_attempts[ip_src]) > 20:
+        if len(self.port_scan_attempts[ip_src]) > 5:
             self.alert_manager.generate_alert(
                 f"Scan de ports suspect détecté de {ip_src}. Tentatives sur {len(self.port_scan_attempts[ip_src])} ports.",
                 event_type="Port_Scan",
@@ -144,6 +153,46 @@ class IDS:
             )
             # Réinitialiser après alerte
             self.port_scan_attempts[ip_src] = {}
+
+    def _detect_ssh_bruteforce(self, ip_src):
+        """Détecte les tentatives de brute force SSH."""
+        
+        # Initialisation pour l'IP source
+        if ip_src not in self.ssh_attempts:
+            self.ssh_attempts[ip_src] = 0
+        
+        self.ssh_attempts[ip_src] += 1
+        
+        # Seuil: 5+ tentatives de connexion SSH
+        if self.ssh_attempts[ip_src] > 5:
+            self.alert_manager.generate_alert(
+                f"Attaque SSH Brute Force détectée de {ip_src}. {self.ssh_attempts[ip_src]} tentatives de connexion.",
+                event_type="SSH_Brute_Force",
+                component="IDS",
+                source_ip=ip_src
+            )
+            # Réinitialiser après alerte
+            self.ssh_attempts[ip_src] = 0
+
+    def _detect_icmp_flood(self, ip_src):
+        """Détecte les attaques ICMP flood (ping flood)."""
+        
+        # Initialisation pour l'IP source
+        if ip_src not in self.icmp_packets:
+            self.icmp_packets[ip_src] = 0
+        
+        self.icmp_packets[ip_src] += 1
+        
+        # Seuil: 50+ paquets ICMP
+        if self.icmp_packets[ip_src] > 50:
+            self.alert_manager.generate_alert(
+                f"Attaque ICMP Flood détectée de {ip_src}. {self.icmp_packets[ip_src]} paquets ICMP reçus.",
+                event_type="ICMP_Flood",
+                component="IDS",
+                source_ip=ip_src
+            )
+            # Réinitialiser après alerte
+            self.icmp_packets[ip_src] = 0
 
     def _sniff_loop(self, interface=None):
         """Boucle de sniffer de paquets."""

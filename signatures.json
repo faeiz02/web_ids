@@ -1,24 +1,8 @@
 [
     {
-        "id": "SIG-001",
-        "name": "SQL Injection Basic",
-        "pattern": "(' OR '1'='1|UNION SELECT|waitfor delay|SELECT.*FROM)",
-        "protocol": "TCP",
-        "port": 0,
-        "severity": "High"
-    },
-    {
-        "id": "SIG-002",
-        "name": "XSS Script Tag",
-        "pattern": "(<script>|javascript:alert|onerror=)",
-        "protocol": "TCP",
-        "port": 0,
-        "severity": "Medium"
-    },
-    {
         "id": "SIG-003",
         "name": "Path Traversal",
-        "pattern": "(\\.\\./\\.\\./|\\.\\.\\\\\\.\\.\\\\|/etc/passwd|c:\\\\boot.ini)",
+        "pattern": "(\\.\\./\\.\\./|\\.\\.\\\\\\\\\\.\\.\\\\\\\\|/etc/passwd|c:\\\\boot.ini)",
         "protocol": "TCP",
         "port": 0,
         "severity": "High"

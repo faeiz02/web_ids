@@ -60,18 +60,26 @@ class AlertManager:
         self.alert_file = os.path.join(os.path.dirname(__file__), alert_file)
         self.alerts = self._load_alerts()
 
-    def _load_alerts(self):
-        """Charge les alertes depuis le fichier."""
+    def _load_alerts(self, limit=500):
+        """Charge les alertes depuis le fichier (limitées aux plus récentes)."""
         alerts = []
         if os.path.exists(self.alert_file):
-            with open(self.alert_file, 'r') as f:
-                for line in f:
-                    if line.strip():
-                        try:
-                            data = json.loads(line)
-                            alerts.append(Alert.from_dict(data))
-                        except json.JSONDecodeError as e:
-                            print(f"Erreur de décodage JSON dans le fichier d'alertes: {e}")
+            try:
+                with open(self.alert_file, 'r') as f:
+                    # Lire toutes les lignes
+                    lines = f.readlines()
+                    # Prendre seulement les dernières 'limit' lignes
+                    recent_lines = lines[-limit:] if len(lines) > limit else lines
+                    
+                    for line in recent_lines:
+                        if line.strip():
+                            try:
+                                data = json.loads(line)
+                                alerts.append(Alert.from_dict(data))
+                            except json.JSONDecodeError as e:
+                                print(f"Erreur de décodage JSON dans le fichier d'alertes: {e}")
+            except Exception as e:
+                print(f"Erreur lors du chargement des alertes: {e}")
         return alerts
 
     def _save_alerts(self):
@@ -90,6 +98,8 @@ class AlertManager:
 
     def get_active_alerts(self):
         """Retourne les alertes non acquittées (plus récentes en premier)."""
+        # Recharger les alertes depuis le fichier pour s'assurer qu'elles sont à jour
+        self.alerts = self._load_alerts()
         active = [alert for alert in self.alerts if not alert.acknowledged]
         return active[::-1]
 
@@ -104,4 +114,6 @@ class AlertManager:
 
     def get_all_alerts(self):
         """Retourne toutes les alertes (plus récentes en premier)."""
+        # Recharger les alertes depuis le fichier pour s'assurer qu'elles sont à jour
+        self.alerts = self._load_alerts()
         return self.alerts[::-1]

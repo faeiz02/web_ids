@@ -7,27 +7,7 @@ import sys
 TARGET_IP = "127.0.0.1" # Changez si l'IDS écoute sur une autre interface (ex: 192.168.x.x)
 TARGET_PORT = 5000 # Port de l'application Flask
 
-def test_sql_injection():
-    print(f"[*] Test 1: Simulation SQL Injection vers {TARGET_IP}:{TARGET_PORT}...")
-    try:
-        # Pattern: ' OR '1'='1
-        payload = {'q': "' OR '1'='1"}
-        url = f"http://{TARGET_IP}:{TARGET_PORT}/"
-        requests.get(url, params=payload, timeout=2)
-        print("    -> Requête envoyée.")
-    except Exception as e:
-        print(f"    -> Erreur d'envoi: {e}")
 
-def test_xss():
-    print(f"[*] Test 2: Simulation XSS vers {TARGET_IP}:{TARGET_PORT}...")
-    try:
-        # Pattern: <script>
-        payload = {'q': "<script>alert('test')</script>"}
-        url = f"http://{TARGET_IP}:{TARGET_PORT}/"
-        requests.get(url, params=payload, timeout=2)
-        print("    -> Requête envoyée.")
-    except Exception as e:
-        print(f"    -> Erreur d'envoi: {e}")
 
 def test_port_scan():
     print(f"[*] Test 3: Simulation Scan de Ports (5+ ports) vers {TARGET_IP}...")
@@ -100,6 +80,32 @@ def test_cleartext_credentials():
     except Exception as e:
         print(f"    -> Erreur d'envoi TCP: {e}")
 
+
+
+def test_icmp_flood():
+    print(f"[*] Test 10: Simulation ICMP Flood vers {TARGET_IP}...")
+    try:
+        # Utiliser ping pour envoyer 100 paquets ICMP
+        import subprocess
+        import platform
+        
+        # Adapter la commande selon l'OS
+        if platform.system().lower() == "windows":
+            # Windows: ping -n 100
+            subprocess.run(["ping", "-n", "100", TARGET_IP], 
+                         stdout=subprocess.DEVNULL, 
+                         stderr=subprocess.DEVNULL,
+                         timeout=10)
+        else:
+            # Linux/Mac: ping -c 100
+            subprocess.run(["ping", "-c", "100", TARGET_IP], 
+                         stdout=subprocess.DEVNULL, 
+                         stderr=subprocess.DEVNULL,
+                         timeout=10)
+        print(f"    -> 100 paquets ICMP envoyés.")
+    except Exception as e:
+        print(f"    -> Erreur: {e}")
+
 if __name__ == "__main__":
     print("=== Script de Test IDS ===")
     print("Assurez-vous que l'application (et l'IDS) est lancée !")
@@ -108,10 +114,6 @@ if __name__ == "__main__":
     
     print(f"Cible: {TARGET_IP}")
     
-    test_sql_injection()
-    time.sleep(1)
-    test_xss()
-    time.sleep(1)
     test_port_scan()
     time.sleep(1)
     test_shellshock()
@@ -123,6 +125,9 @@ if __name__ == "__main__":
     test_malware_c2()
     time.sleep(1)
     test_cleartext_credentials()
+    time.sleep(1)
+    test_icmp_flood()
     
     print("\n=== Test Terminé ===")
     print("Vérifiez maintenant l'onglet 'Alertes' dans l'application.")
+
