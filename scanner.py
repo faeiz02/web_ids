@@ -8,20 +8,31 @@ class NetworkScanner:
     """
     Effectue des scans réseau en utilisant la bibliothèque python-nmap.
     Implémente les fonctionnalités 3.1.1 à 3.1.4 avec options avancées.
+    
+    Fonctionnalités:
+    - Détection d'hôtes actifs sur le réseau
+    - Scan de ports et détection de services
+    - Scan parallèle pour améliorer les performances
+    - Support de différentes vitesses de scan (T1-T5)
+    - Détection d'OS et de versions de services
     """
     def __init__(self, log_manager: LogManager):
-        self.nm = nmap.PortScanner()
-        self.log_manager = log_manager
-        self.active_hosts = {} # {ip_address: Host object}
-        self.current_executor = None
-        self.stop_event = concurrent.futures.Future() # Using a Future as a flag or simple Event wrapper
-        self.stop_requested = False
+        self.nm = nmap.PortScanner()  # Instance du scanner Nmap
+        self.log_manager = log_manager  # Gestionnaire de logs
+        self.active_hosts = {}  # Dictionnaire {ip_address: Host object}
+        self.current_executor = None  # Exécuteur de threads pour scans parallèles
+        self.stop_event = concurrent.futures.Future()  # Flag pour arrêter les scans
+        self.stop_requested = False  # Indicateur d'arrêt demandé
 
     def stop_scan(self):
-        """Arrête le scan en cours."""
+        """
+        Arrête le scan en cours.
+        
+        Utilisé pour interrompre un scan long qui prend trop de temps.
+        """
         self.stop_requested = True
         if self.current_executor:
-            # Shutdown without waiting for pending futures
+            # Arrêt sans attendre les tâches en attente
             self.current_executor.shutdown(wait=False, cancel_futures=True)
             self.log_manager.log("Demande d'arrêt du scan reçue.", event_type="SCAN_ABORTED", component="NetworkScanner")
 
@@ -52,33 +63,36 @@ class NetworkScanner:
         Construit les arguments Nmap selon les options choisies.
         
         Args:
-            scan_type: 'discovery', 'ports', ou 'full'
+            scan_type: 'discovery' (découverte d'hôtes), 'ports' (scan de ports), ou 'full' (complet)
             ports: plage de ports (ex: '1-1024', '80,443')
-            detection: 'none' (standard), 'services' (détection avancée)
-            speed: 'T1' (lent), 'T3' (normal), 'T4' (rapide), 'T5' (très rapide)
-            scan_method: 'connect' (-sT) ou 'syn' (-sS)
+            detection: 'none' (standard), 'services' (détection avancée avec OS et versions)
+            speed: 'T1' (lent/furtif), 'T3' (normal), 'T4' (rapide), 'T5' (très rapide)
+            scan_method: 'connect' (-sT, compatible Windows) ou 'syn' (-sS, nécessite root)
+        
+        Returns:
+            Chaîne d'arguments Nmap prête à l'emploi
         """
         args = []
         
-        # Type de scan de base et méthode
+        # === Type de scan de base et méthode ===
         if scan_type == 'discovery':
-            args.append('-sn')  # Ping scan uniquement
+            args.append('-sn')  # Ping scan uniquement (pas de scan de ports)
         elif scan_type in ['ports', 'full']:
             if scan_method == 'syn':
-                args.append('-sS')  # SYN scan (root required)
+                args.append('-sS')  # SYN scan (rapide mais nécessite root)
             else:
-                args.append('-sT')  # Connect scan (default, reliable)
+                args.append('-sT')  # Connect scan (par défaut, fiable, compatible Windows)
             
-        # Options de détection
+        # === Options de détection avancée ===
         if detection == 'services':
             args.append('-sV')  # Détection de version des services
             args.append('-O')   # Détection de l'OS
-            args.append('--version-intensity 5')  # Intensité maximale
+            args.append('--version-intensity 5')  # Intensité maximale pour la détection
         
-        # Vitesse du scan
-        args.append(f'-{speed}')
+        # === Vitesse du scan ===
+        args.append(f'-{speed}')  # T1 = lent, T3 = normal, T5 = très rapide
         
-        # Ports spécifiques
+        # === Ports spécifiques ===
         if ports and scan_type != 'discovery':
             args.append(f'-p {ports}')
         
@@ -122,16 +136,23 @@ class NetworkScanner:
         """
         Détecte les hôtes actifs sur le réseau (3.1.1).
         
+        Effectue un scan de découverte pour identifier les machines
+        connectées au réseau.
+        
         Args:
             target_range: plage réseau (ex: '192.168.1.0/24')
             detection: niveau de détection ('none' ou 'services')
             speed: vitesse du scan ('T1' à 'T5')
             scan_method: 'connect' ou 'syn'
+        
+        Returns:
+            Dictionnaire des hôtes actifs {ip: Host object}
         """
         options = {'detection': detection, 'speed': speed, 'method': scan_method}
         self._log_scan_start("Host Discovery", target_range, options)
         
         try:
+            # Construction et exécution de la commande Nmap
             args = self._build_nmap_arguments('discovery', detection=detection, speed=speed, scan_method=scan_method)
             self.nm.scan(hosts=target_range, arguments=args)
         except nmap.PortScannerError as e:
@@ -142,8 +163,10 @@ class NetworkScanner:
             )
             return {}
 
+        # === Traitement des résultats ===
         hosts_found = 0
         for host_ip in self.nm.all_hosts():
+            # Vérifier si l'hôte est actif
             if self.nm[host_ip].state() == 'up':
                 hostname = self.nm[host_ip].hostname()
                 host = Host(host_ip, hostname)
@@ -154,6 +177,7 @@ class NetworkScanner:
                     if os_matches:
                         host.os_info = os_matches[0].get('name', 'Unknown')
                 
+                # Enregistrer l'hôte découvert
                 self.active_hosts[host_ip] = host
                 hosts_found += 1
                 
@@ -281,19 +305,22 @@ class NetworkScanner:
             )
             return self._format_results({}, output_format)
 
-        # 2. Scan de ports et services sur chaque hôte actif (PARALLEL)
+        # === 2. Scan de ports et services sur chaque hôte actif (PARALLÈLE) ===
+        # Utilisation de ThreadPoolExecutor pour scanner plusieurs hôtes simultanément
+        # Cela améliore considérablement les performances pour les réseaux avec plusieurs hôtes
         scan_results = {}
         self.stop_requested = False
         
-        # Use ThreadPoolExecutor to scan multiple hosts simultaneously
-        # Increased max_workers to 30 for faster parallel scanning
+        # Configuration de l'exécuteur avec 30 threads pour un scan rapide
         try:
             self.current_executor = concurrent.futures.ThreadPoolExecutor(max_workers=30)
             with self.current_executor as executor:
+                # Soumission de toutes les tâches de scan
                 future_to_ip = {}
                 for ip in active_hosts:
                     if self.stop_requested:
                         break
+                    # Création d'une tâche de scan pour chaque hôte
                     future_to_ip[executor.submit(self.scan_ports_and_services, ip, ports, detection, speed, scan_method)] = ip
                 
                 for future in concurrent.futures.as_completed(future_to_ip):
@@ -311,7 +338,7 @@ class NetworkScanner:
 
         if self.stop_requested:
             self.log_manager.log("Scan complet arrêté par l'utilisateur.", event_type="SCAN_ABORTED", component="NetworkScanner")
-            # Return partial results? Or empty? Let's return partial.
+            
             # But active_hosts might be partially updated.
 
 

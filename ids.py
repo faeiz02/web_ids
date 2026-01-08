@@ -11,17 +11,33 @@ class IDS:
     """
     Système de Détection d'Intrusion (IDS) pour la surveillance du trafic réseau.
     Implémente les fonctionnalités 3.2.1 à 3.2.4.
+    
+    Ce système analyse le trafic réseau en temps réel pour détecter:
+    - Les scans de ports suspects
+    - Les attaques par signature (SQL injection, XSS, etc.)
+    - Les tentatives de brute force SSH
+    - Les attaques DoS/DDoS
+    - Les floods ICMP
     """
     def __init__(self, alert_manager: AlertManager, log_manager: LogManager):
+        # Gestionnaires pour les alertes et les logs
         self.alert_manager = alert_manager
         self.log_manager = log_manager
+        
+        # Thread de surveillance et événement d'arrêt
         self._monitoring_thread = None
         self._stop_event = threading.Event()
-        self.port_scan_attempts = {} # {ip_src: {port: count}}
-        self.traffic_volume = {} # {ip_src: bytes_count}
-        self.volume_threshold = 10000000 # 10MB de trafic comme seuil simple pour DoS
-        self.ssh_attempts = {} # {ip_src: count} - Pour détecter SSH brute force
-        self.icmp_packets = {} # {ip_src: count} - Pour détecter ICMP flood
+        
+        # Dictionnaires de suivi des tentatives d'attaque par IP source
+        self.port_scan_attempts = {}  # {ip_src: {port: count}} - Suivi des scans de ports
+        self.traffic_volume = {}      # {ip_src: bytes_count} - Volume de trafic par IP
+        self.ssh_attempts = {}        # {ip_src: count} - Tentatives de connexion SSH
+        self.icmp_packets = {}        # {ip_src: count} - Nombre de paquets ICMP
+        
+        # Seuil de détection DoS: 10MB de trafic par IP
+        self.volume_threshold = 10000000
+        
+        # Chargement des signatures d'attaques depuis le fichier JSON
         self.signatures = self._load_signatures()
 
     def _load_signatures(self, filepath="signatures.json"):
@@ -36,18 +52,29 @@ class IDS:
         return []
 
     def _analyze_packet(self, packet):
-        """Analyse un paquet pour détecter des activités suspectes."""
+        """
+        Analyse un paquet réseau pour détecter des activités suspectes.
         
-        # 1. Journalisation du trafic (3.2.2 - simple)
+        Cette méthode est appelée pour chaque paquet capturé et effectue:
+        1. Le suivi du volume de trafic par IP
+        2. La détection de scans de ports (paquets SYN)
+        3. La détection par signatures (SQL injection, XSS, etc.)
+        4. La détection de brute force SSH
+        5. La détection de floods ICMP
+        """
+        
+        # === ANALYSE DES PAQUETS IP ===
         if IP in packet:
-            ip_src = packet[IP].src
-            ip_dst = packet[IP].dst
+            ip_src = packet[IP].src  # Adresse IP source
+            ip_dst = packet[IP].dst  # Adresse IP destination
             
-            # Mise à jour du volume de trafic (3.2.4)
+            # --- Suivi du volume de trafic par IP source ---
+            # Permet de détecter les attaques DoS basées sur le volume
             packet_size = len(packet)
             self.traffic_volume[ip_src] = self.traffic_volume.get(ip_src, 0) + packet_size
             
-            # Détection de DoS simple (3.2.4)
+            # --- Détection d'attaque DoS simple ---
+            # Si une IP dépasse le seuil de volume (10MB), on génère une alerte
             if self.traffic_volume[ip_src] > self.volume_threshold:
                 self.alert_manager.generate_alert(
                     f"Possible attaque DoS simple détectée de {ip_src}. Volume de trafic: {self.traffic_volume[ip_src]} bytes.",
@@ -55,71 +82,91 @@ class IDS:
                     component="IDS",
                     source_ip=ip_src
                 )
-                # Réinitialiser pour éviter les alertes répétitives immédiates
+                # Réinitialisation du compteur pour éviter les alertes répétitives
                 self.traffic_volume[ip_src] = 0 
 
-            # 2. Détection de scan de ports (3.2.1)
+            # === ANALYSE DES PAQUETS TCP ===
             if TCP in packet:
-                src_port = packet[TCP].sport
-                dst_port = packet[TCP].dport
+                src_port = packet[TCP].sport  # Port source
+                dst_port = packet[TCP].dport  # Port destination
                 
-                # DEBUG: Voir tout le trafic TCP
+                # DEBUG: Affichage du trafic TCP pour le débogage
                 print(f"[DEBUG] TCP Packet: {ip_src}:{src_port} -> {packet[IP].dst}:{dst_port}")
 
-                if packet[TCP].flags == 'S': # SYN packet - début de connexion
+                # --- Détection de scan de ports ---
+                # Les paquets SYN (flag 'S') indiquent une tentative de connexion
+                if packet[TCP].flags == 'S':
                     self._detect_port_scan(ip_src, dst_port)
-                    # Détection SSH brute force
+                    
+                    # Détection spécifique pour SSH brute force (port 22)
                     if dst_port == 22:
                         self._detect_ssh_bruteforce(ip_src)
                 
-                # 3. Détection par signature (3.2.3)
+                # --- Détection par signature dans le payload TCP ---
+                # Recherche de patterns d'attaques (SQL injection, XSS, etc.)
                 if packet.haslayer(Raw):
                     try:
+                        # Décodage du payload en UTF-8
                         payload = packet[Raw].load.decode('utf-8', errors='ignore')
+                        # Décodage URL pour détecter les payloads encodés
                         decoded_payload = unquote(payload)
-                        # self._check_signatures(decoded_payload, ip_src, dst_port, "TCP")
-                        # Changement: on passe src et dst port pour vérifier les deux
+                        # Vérification des signatures avec ports source et destination
                         self._check_signatures(decoded_payload, ip_src, src_port, dst_port, "TCP")
                     except Exception as e:
                         print(f"[DEBUG] Erreur analyse: {e}")
                         pass 
 
-            # 4. Analyse UDP pour signatures
+            # === ANALYSE DES PAQUETS UDP ===
             if UDP in packet:
-                src_port = packet[UDP].sport
-                dst_port = packet[UDP].dport
+                src_port = packet[UDP].sport  # Port source UDP
+                dst_port = packet[UDP].dport  # Port destination UDP
                 
+                # --- Détection par signature dans le payload UDP ---
+                # Utile pour détecter les beacons C2 et autres attaques UDP
                 if packet.haslayer(Raw):
                     try:
+                        # Décodage du payload UDP
                         payload = packet[Raw].load.decode('utf-8', errors='ignore')
                         decoded_payload = unquote(payload)
-                        # Vérification Signature UDP
+                        # Vérification des signatures UDP
                         self._check_signatures(decoded_payload, ip_src, src_port, dst_port, "UDP")
                     except Exception as e:
-                        # print(f"[DEBUG] Erreur analyse UDP: {e}")
+                        # Ignorer les erreurs de décodage
                         pass 
 
-            # 5. Détection ICMP Flood
+            # === ANALYSE DES PAQUETS ICMP ===
+            # Détection des attaques par flood ICMP (ping flood)
             if ICMP in packet:
                 self._detect_icmp_flood(ip_src)
 
-            # Journalisation (simplifiée pour éviter un journal trop volumineux)
-            # self.log_manager.log(f"Trafic: {ip_src} -> {ip_dst}", event_type="TRAFFIC", component="IDS")
+            # Note: La journalisation de chaque paquet est désactivée pour éviter
+            # un fichier de logs trop volumineux. Seuls les événements importants sont loggés.
 
     def _check_signatures(self, payload, ip_src, src_port, dst_port, protocol):
-        """Vérifie si le payload correspond à une signature connue."""
+        """
+        Vérifie si le payload correspond à une signature d'attaque connue.
+        
+        Les signatures sont chargées depuis signatures.json et contiennent:
+        - pattern: expression régulière à rechercher
+        - port: port spécifique à surveiller (optionnel)
+        - protocol: TCP ou UDP (optionnel)
+        - severity: niveau de gravité (HIGH, MEDIUM, LOW)
+        """
         for sig in self.signatures:
-            # Vérification du port (si spécifié)
-            # On vérifie si le traffic concerne le port surveillé (en source ou destination)
+            # --- Filtrage par port ---
+            # Si une signature spécifie un port, on vérifie qu'il correspond
+            # au port source OU destination
             if sig.get('port'):
                 if sig['port'] != src_port and sig['port'] != dst_port:
-                    continue
+                    continue  # Passer à la signature suivante
                 
-            # Vérification du protocole
+            # --- Filtrage par protocole ---
+            # Vérifier que le protocole correspond (TCP ou UDP)
             if sig.get('protocol') and sig['protocol'].upper() != protocol:
-                continue
+                continue  # Passer à la signature suivante
                 
-            # Vérification du pattern
+            # --- Recherche du pattern dans le payload ---
+            # Utilisation d'une regex insensible à la casse
             if re.search(sig['pattern'], payload, re.IGNORECASE):
                 print(f"[DEBUG] !! MATCH SIGNATURE !! {sig['name']}")
                 self.alert_manager.generate_alert(
@@ -131,19 +178,27 @@ class IDS:
                 break
 
     def _detect_port_scan(self, ip_src, port_dst):
-        """Logique de détection de scan de ports."""
+        """
+        Détecte les scans de ports suspects.
         
-        # Initialisation pour l'IP source
+        Un scan de ports est détecté lorsqu'une IP tente de se connecter
+        à plusieurs ports différents en peu de temps.
+        Seuil actuel: plus de 5 ports différents = alerte
+        """
+        
+        # Initialisation du dictionnaire pour cette IP si nécessaire
         if ip_src not in self.port_scan_attempts:
             self.port_scan_attempts[ip_src] = {}
         
-        # Initialisation pour le port de destination
+        # Initialisation du compteur pour ce port si nécessaire
         if port_dst not in self.port_scan_attempts[ip_src]:
             self.port_scan_attempts[ip_src][port_dst] = 0
         
+        # Incrémenter le compteur de tentatives pour ce port
         self.port_scan_attempts[ip_src][port_dst] += 1
         
-        # Seuil simple: si une IP tente de se connecter à plus de 20 ports différents en peu de temps
+        # --- Détection du scan ---
+        # Si l'IP a tenté de se connecter à plus de 5 ports différents
         if len(self.port_scan_attempts[ip_src]) > 5:
             self.alert_manager.generate_alert(
                 f"Scan de ports suspect détecté de {ip_src}. Tentatives sur {len(self.port_scan_attempts[ip_src])} ports.",
@@ -155,15 +210,23 @@ class IDS:
             self.port_scan_attempts[ip_src] = {}
 
     def _detect_ssh_bruteforce(self, ip_src):
-        """Détecte les tentatives de brute force SSH."""
+        """
+        Détecte les tentatives de brute force SSH.
         
-        # Initialisation pour l'IP source
+        Une attaque brute force SSH est détectée lorsqu'une IP effectue
+        plusieurs tentatives de connexion SSH en peu de temps.
+        Seuil actuel: plus de 5 tentatives = alerte
+        """
+        
+        # Initialisation du compteur pour cette IP si nécessaire
         if ip_src not in self.ssh_attempts:
             self.ssh_attempts[ip_src] = 0
         
+        # Incrémenter le compteur de tentatives SSH
         self.ssh_attempts[ip_src] += 1
         
-        # Seuil: 5+ tentatives de connexion SSH
+        # --- Détection du brute force ---
+        # Si l'IP a effectué plus de 5 tentatives de connexion SSH
         if self.ssh_attempts[ip_src] > 5:
             self.alert_manager.generate_alert(
                 f"Attaque SSH Brute Force détectée de {ip_src}. {self.ssh_attempts[ip_src]} tentatives de connexion.",
@@ -175,15 +238,23 @@ class IDS:
             self.ssh_attempts[ip_src] = 0
 
     def _detect_icmp_flood(self, ip_src):
-        """Détecte les attaques ICMP flood (ping flood)."""
+        """
+        Détecte les attaques ICMP flood (ping flood).
         
-        # Initialisation pour l'IP source
+        Une attaque ICMP flood est détectée lorsqu'une IP envoie
+        un grand nombre de paquets ICMP (ping) en peu de temps.
+        Seuil actuel: plus de 50 paquets ICMP = alerte
+        """
+        
+        # Initialisation du compteur pour cette IP si nécessaire
         if ip_src not in self.icmp_packets:
             self.icmp_packets[ip_src] = 0
         
+        # Incrémenter le compteur de paquets ICMP
         self.icmp_packets[ip_src] += 1
         
-        # Seuil: 50+ paquets ICMP
+        # --- Détection du flood ICMP ---
+        # Si l'IP a envoyé plus de 50 paquets ICMP
         if self.icmp_packets[ip_src] > 50:
             self.alert_manager.generate_alert(
                 f"Attaque ICMP Flood détectée de {ip_src}. {self.icmp_packets[ip_src]} paquets ICMP reçus.",
