@@ -92,6 +92,13 @@ def visualization_page():
     return render_template('visualization.html')
 
 
+@app.route('/config')
+def config_page():
+    """Page de configuration de l'IDS."""
+    return render_template('config.html')
+
+
+
 # ============================================================================
 # API ENDPOINTS - SCANNER
 # ============================================================================
@@ -451,6 +458,209 @@ def get_stats():
     }
     
     return jsonify(stats)
+
+
+# ============================================================================
+# API ENDPOINTS - CONFIGURATION
+# ============================================================================
+
+@app.route('/api/config', methods=['GET'])
+def get_config():
+    """Retourne la configuration actuelle de l'IDS."""
+    config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config.json')
+    try:
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+        return jsonify(config)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/config/thresholds', methods=['PUT'])
+def update_thresholds():
+    """Met à jour les seuils de détection de l'IDS."""
+    data = request.get_json()
+    
+    if not data or 'thresholds' not in data:
+        return jsonify({'error': 'Données invalides'}), 400
+    
+    thresholds = data['thresholds']
+    
+    # Validation des données
+    try:
+        dos_volume = int(thresholds.get('dos_volume', ids.volume_threshold))
+        port_scan_max_ports = int(thresholds.get('port_scan_max_ports', ids.port_scan_threshold))
+        ssh_bruteforce_attempts = int(thresholds.get('ssh_bruteforce_attempts', ids.ssh_bruteforce_threshold))
+        icmp_flood_packets = int(thresholds.get('icmp_flood_packets', ids.icmp_flood_threshold))
+    except ValueError:
+        return jsonify({'error': 'Les valeurs doivent être des entiers'}), 400
+    
+    # Mettre à jour les seuils dans l'IDS
+    ids.update_thresholds(
+        dos_volume=dos_volume,
+        port_scan_max_ports=port_scan_max_ports,
+        ssh_bruteforce_attempts=ssh_bruteforce_attempts,
+        icmp_flood_packets=icmp_flood_packets
+    )
+    
+    # Sauvegarder dans le fichier config.json
+    config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config.json')
+    try:
+        config = {'thresholds': {
+            'dos_volume': dos_volume,
+            'port_scan_max_ports': port_scan_max_ports,
+            'ssh_bruteforce_attempts': ssh_bruteforce_attempts,
+            'icmp_flood_packets': icmp_flood_packets
+        }}
+        with open(config_path, 'w') as f:
+            json.dump(config, f, indent=2)
+        
+        log_manager.log("Configuration des seuils mise à jour via l'API", event_type="CONFIG_UPDATE", component="Flask")
+        return jsonify({'message': 'Configuration mise à jour avec succès', 'thresholds': config['thresholds']})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/signatures', methods=['GET'])
+def get_signatures():
+    """Retourne toutes les signatures d'attaques."""
+    signatures_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'signatures.json')
+    try:
+        with open(signatures_path, 'r') as f:
+            signatures = json.load(f)
+        return jsonify(signatures)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/signatures', methods=['POST'])
+def add_signature():
+    """Ajoute une nouvelle signature d'attaque."""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'Données invalides'}), 400
+    
+    # Validation des champs requis
+    required_fields = ['id', 'name', 'pattern', 'protocol', 'severity']
+    for field in required_fields:
+        if field not in data:
+            return jsonify({'error': f'Champ requis manquant: {field}'}), 400
+    
+    signatures_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'signatures.json')
+    try:
+        # Charger les signatures existantes
+        with open(signatures_path, 'r') as f:
+            signatures = json.load(f)
+        
+        # Vérifier si l'ID existe déjà
+        if any(sig['id'] == data['id'] for sig in signatures):
+            return jsonify({'error': 'Une signature avec cet ID existe déjà'}), 400
+        
+        # Ajouter la nouvelle signature
+        new_signature = {
+            'id': data['id'],
+            'name': data['name'],
+            'pattern': data['pattern'],
+            'protocol': data['protocol'],
+            'port': int(data.get('port', 0)),
+            'severity': data['severity']
+        }
+        signatures.append(new_signature)
+        
+        # Sauvegarder
+        with open(signatures_path, 'w') as f:
+            json.dump(signatures, f, indent=4)
+        
+        # Recharger les signatures dans l'IDS
+        ids.signatures = ids._load_signatures()
+        
+        log_manager.log(f"Nouvelle signature ajoutée: {data['name']}", event_type="SIGNATURE_ADD", component="Flask")
+        return jsonify({'message': 'Signature ajoutée avec succès', 'signature': new_signature})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/signatures/<signature_id>', methods=['PUT'])
+def update_signature(signature_id):
+    """Met à jour une signature existante."""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'Données invalides'}), 400
+    
+    signatures_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'signatures.json')
+    try:
+        # Charger les signatures existantes
+        with open(signatures_path, 'r') as f:
+            signatures = json.load(f)
+        
+        # Trouver la signature à mettre à jour
+        signature_index = None
+        for i, sig in enumerate(signatures):
+            if sig['id'] == signature_id:
+                signature_index = i
+                break
+        
+        if signature_index is None:
+            return jsonify({'error': 'Signature non trouvée'}), 404
+        
+        # Mettre à jour la signature
+        signatures[signature_index] = {
+            'id': signature_id,
+            'name': data.get('name', signatures[signature_index]['name']),
+            'pattern': data.get('pattern', signatures[signature_index]['pattern']),
+            'protocol': data.get('protocol', signatures[signature_index]['protocol']),
+            'port': int(data.get('port', signatures[signature_index].get('port', 0))),
+            'severity': data.get('severity', signatures[signature_index]['severity'])
+        }
+        
+        # Sauvegarder
+        with open(signatures_path, 'w') as f:
+            json.dump(signatures, f, indent=4)
+        
+        # Recharger les signatures dans l'IDS
+        ids.signatures = ids._load_signatures()
+        
+        log_manager.log(f"Signature mise à jour: {signature_id}", event_type="SIGNATURE_UPDATE", component="Flask")
+        return jsonify({'message': 'Signature mise à jour avec succès', 'signature': signatures[signature_index]})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/signatures/<signature_id>', methods=['DELETE'])
+def delete_signature(signature_id):
+    """Supprime une signature."""
+    signatures_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'signatures.json')
+    try:
+        # Charger les signatures existantes
+        with open(signatures_path, 'r') as f:
+            signatures = json.load(f)
+        
+        # Trouver et supprimer la signature
+        signature_index = None
+        for i, sig in enumerate(signatures):
+            if sig['id'] == signature_id:
+                signature_index = i
+                break
+        
+        if signature_index is None:
+            return jsonify({'error': 'Signature non trouvée'}), 404
+        
+        deleted_signature = signatures.pop(signature_index)
+        
+        # Sauvegarder
+        with open(signatures_path, 'w') as f:
+            json.dump(signatures, f, indent=4)
+        
+        # Recharger les signatures dans l'IDS
+        ids.signatures = ids._load_signatures()
+        
+        log_manager.log(f"Signature supprimée: {signature_id}", event_type="SIGNATURE_DELETE", component="Flask")
+        return jsonify({'message': 'Signature supprimée avec succès', 'signature': deleted_signature})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 
 # ============================================================================

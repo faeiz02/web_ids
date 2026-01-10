@@ -34,11 +34,45 @@ class IDS:
         self.ssh_attempts = {}        # {ip_src: count} - Tentatives de connexion SSH
         self.icmp_packets = {}        # {ip_src: count} - Nombre de paquets ICMP
         
-        # Seuil de détection DoS: 10MB de trafic par IP
-        self.volume_threshold = 10000000
+        # Seuils de détection configurables (chargés depuis config.json)
+        self.volume_threshold = 10000000  # Seuil DoS par défaut
+        self.port_scan_threshold = 5  # Nombre de ports pour détecter un scan
+        self.ssh_bruteforce_threshold = 5  # Tentatives SSH avant alerte
+        self.icmp_flood_threshold = 50  # Paquets ICMP avant alerte
+        
+        # Chargement de la configuration
+        self._load_config()
         
         # Chargement des signatures d'attaques depuis le fichier JSON
         self.signatures = self._load_signatures()
+
+    def _load_config(self, filepath="config.json"):
+        """Charge la configuration des seuils depuis un fichier JSON."""
+        filepath = os.path.join(os.path.dirname(__file__), filepath)
+        if os.path.exists(filepath):
+            try:
+                with open(filepath, 'r') as f:
+                    config = json.load(f)
+                    thresholds = config.get('thresholds', {})
+                    self.volume_threshold = thresholds.get('dos_volume', 10000000)
+                    self.port_scan_threshold = thresholds.get('port_scan_max_ports', 5)
+                    self.ssh_bruteforce_threshold = thresholds.get('ssh_bruteforce_attempts', 5)
+                    self.icmp_flood_threshold = thresholds.get('icmp_flood_packets', 50)
+                    self.log_manager.log(f"Configuration chargée: DoS={self.volume_threshold}, PortScan={self.port_scan_threshold}, SSH={self.ssh_bruteforce_threshold}, ICMP={self.icmp_flood_threshold}", event_type="CONFIG_LOADED", component="IDS")
+            except Exception as e:
+                self.log_manager.log(f"Erreur lors du chargement de la configuration: {e}", event_type="ERROR", component="IDS")
+
+    def update_thresholds(self, dos_volume=None, port_scan_max_ports=None, ssh_bruteforce_attempts=None, icmp_flood_packets=None):
+        """Met à jour les seuils de détection dynamiquement."""
+        if dos_volume is not None:
+            self.volume_threshold = dos_volume
+        if port_scan_max_ports is not None:
+            self.port_scan_threshold = port_scan_max_ports
+        if ssh_bruteforce_attempts is not None:
+            self.ssh_bruteforce_threshold = ssh_bruteforce_attempts
+        if icmp_flood_packets is not None:
+            self.icmp_flood_threshold = icmp_flood_packets
+        self.log_manager.log(f"Seuils mis à jour: DoS={self.volume_threshold}, PortScan={self.port_scan_threshold}, SSH={self.ssh_bruteforce_threshold}, ICMP={self.icmp_flood_threshold}", event_type="CONFIG_UPDATED", component="IDS")
 
     def _load_signatures(self, filepath="signatures.json"):
         """Charge les signatures d'attaques depuis un fichier JSON."""
@@ -198,8 +232,8 @@ class IDS:
         self.port_scan_attempts[ip_src][port_dst] += 1
         
         # --- Détection du scan ---
-        # Si l'IP a tenté de se connecter à plus de 5 ports différents
-        if len(self.port_scan_attempts[ip_src]) > 5:
+        # Si l'IP a tenté de se connecter à plus de N ports différents (configurable)
+        if len(self.port_scan_attempts[ip_src]) > self.port_scan_threshold:
             self.alert_manager.generate_alert(
                 f"Scan de ports suspect détecté de {ip_src}. Tentatives sur {len(self.port_scan_attempts[ip_src])} ports.",
                 event_type="Port_Scan",
@@ -226,8 +260,8 @@ class IDS:
         self.ssh_attempts[ip_src] += 1
         
         # --- Détection du brute force ---
-        # Si l'IP a effectué plus de 5 tentatives de connexion SSH
-        if self.ssh_attempts[ip_src] > 5:
+        # Si l'IP a effectué plus de N tentatives de connexion SSH (configurable)
+        if self.ssh_attempts[ip_src] > self.ssh_bruteforce_threshold:
             self.alert_manager.generate_alert(
                 f"Attaque SSH Brute Force détectée de {ip_src}. {self.ssh_attempts[ip_src]} tentatives de connexion.",
                 event_type="SSH_Brute_Force",
@@ -254,8 +288,8 @@ class IDS:
         self.icmp_packets[ip_src] += 1
         
         # --- Détection du flood ICMP ---
-        # Si l'IP a envoyé plus de 50 paquets ICMP
-        if self.icmp_packets[ip_src] > 50:
+        # Si l'IP a envoyé plus de N paquets ICMP (configurable)
+        if self.icmp_packets[ip_src] > self.icmp_flood_threshold:
             self.alert_manager.generate_alert(
                 f"Attaque ICMP Flood détectée de {ip_src}. {self.icmp_packets[ip_src]} paquets ICMP reçus.",
                 event_type="ICMP_Flood",

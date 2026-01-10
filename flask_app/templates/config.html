@@ -1,0 +1,991 @@
+{% extends "layout.html" %}
+
+{% block title %}Configuration IDS{% endblock %}
+
+{% block content %}
+<div class="config-container">
+    <div class="config-header">
+        <h1 class="config-title">
+            <i class="fas fa-cog"></i>
+            Configuration de l'IDS
+        </h1>
+        <p class="config-subtitle">Gérez les signatures d'attaques et les seuils de détection</p>
+    </div>
+
+    <!-- Section Gestion des Signatures -->
+    <div class="config-section">
+        <div class="section-header">
+            <h2 class="section-title">
+                <i class="fas fa-shield-alt"></i>
+                Gestion des Signatures
+            </h2>
+            <button class="btn-add-signature" onclick="openAddSignatureModal()">
+                <i class="fas fa-plus"></i>
+                Ajouter une Signature
+            </button>
+        </div>
+
+        <div class="signatures-table-container">
+            <table class="signatures-table" id="signaturesTable">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nom</th>
+                        <th>Pattern</th>
+                        <th>Protocole</th>
+                        <th>Port</th>
+                        <th>Sévérité</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="signaturesTableBody">
+                    <!-- Les signatures seront chargées dynamiquement -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Section Configuration des Seuils -->
+    <div class="config-section">
+        <div class="section-header">
+            <h2 class="section-title">
+                <i class="fas fa-sliders-h"></i>
+                Configuration des Seuils de Détection
+            </h2>
+        </div>
+
+        <div class="thresholds-grid">
+            <!-- Seuil DoS -->
+            <div class="threshold-card">
+                <div class="threshold-icon dos">
+                    <i class="fas fa-bomb"></i>
+                </div>
+                <div class="threshold-content">
+                    <h3 class="threshold-name">Seuil DoS</h3>
+                    <p class="threshold-description">Volume de trafic maximum par IP (en MB)</p>
+                    <div class="threshold-control">
+                        <input type="range" id="dosVolumeSlider" min="1" max="100" value="10" step="1">
+                        <div class="threshold-value-container">
+                            <input type="number" id="dosVolumeInput" min="1" max="100" value="10" step="1">
+                            <span class="threshold-unit">MB</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Seuil Port Scan -->
+            <div class="threshold-card">
+                <div class="threshold-icon portscan">
+                    <i class="fas fa-network-wired"></i>
+                </div>
+                <div class="threshold-content">
+                    <h3 class="threshold-name">Seuil Port Scan</h3>
+                    <p class="threshold-description">Nombre de ports différents avant alerte</p>
+                    <div class="threshold-control">
+                        <input type="range" id="portScanSlider" min="1" max="50" value="5" step="1">
+                        <div class="threshold-value-container">
+                            <input type="number" id="portScanInput" min="1" max="50" value="5" step="1">
+                            <span class="threshold-unit">ports</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Seuil SSH Brute Force -->
+            <div class="threshold-card">
+                <div class="threshold-icon ssh">
+                    <i class="fas fa-terminal"></i>
+                </div>
+                <div class="threshold-content">
+                    <h3 class="threshold-name">Seuil SSH Brute Force</h3>
+                    <p class="threshold-description">Tentatives de connexion SSH avant alerte</p>
+                    <div class="threshold-control">
+                        <input type="range" id="sshBruteforceSlider" min="1" max="20" value="5" step="1">
+                        <div class="threshold-value-container">
+                            <input type="number" id="sshBruteforceInput" min="1" max="20" value="5" step="1">
+                            <span class="threshold-unit">tentatives</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Seuil ICMP Flood -->
+            <div class="threshold-card">
+                <div class="threshold-icon icmp">
+                    <i class="fas fa-wave-square"></i>
+                </div>
+                <div class="threshold-content">
+                    <h3 class="threshold-name">Seuil ICMP Flood</h3>
+                    <p class="threshold-description">Nombre de paquets ICMP avant alerte</p>
+                    <div class="threshold-control">
+                        <input type="range" id="icmpFloodSlider" min="10" max="200" value="50" step="10">
+                        <div class="threshold-value-container">
+                            <input type="number" id="icmpFloodInput" min="10" max="200" value="50" step="10">
+                            <span class="threshold-unit">paquets</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="save-config-container">
+            <button class="btn-save-config" onclick="saveThresholds()">
+                <i class="fas fa-save"></i>
+                Enregistrer la Configuration
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Ajouter/Modifier Signature -->
+<div id="signatureModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="modalTitle">Ajouter une Signature</h2>
+            <button class="modal-close" onclick="closeSignatureModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <form id="signatureForm" onsubmit="saveSignature(event)">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="signatureId">ID de la Signature *</label>
+                    <input type="text" id="signatureId" required placeholder="SIG-010">
+                </div>
+                <div class="form-group">
+                    <label for="signatureName">Nom *</label>
+                    <input type="text" id="signatureName" required placeholder="Nom de l'attaque">
+                </div>
+                <div class="form-group full-width">
+                    <label for="signaturePattern">Pattern (Regex) *</label>
+                    <input type="text" id="signaturePattern" required placeholder="(pattern|regex)">
+                </div>
+                <div class="form-group">
+                    <label for="signatureProtocol">Protocole *</label>
+                    <select id="signatureProtocol" required>
+                        <option value="TCP">TCP</option>
+                        <option value="UDP">UDP</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="signaturePort">Port (0 = tous)</label>
+                    <input type="number" id="signaturePort" value="0" min="0" max="65535">
+                </div>
+                <div class="form-group">
+                    <label for="signatureSeverity">Sévérité *</label>
+                    <select id="signatureSeverity" required>
+                        <option value="Critical">Critical</option>
+                        <option value="High">High</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Low">Low</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-cancel" onclick="closeSignatureModal()">Annuler</button>
+                <button type="submit" class="btn-submit">
+                    <i class="fas fa-check"></i>
+                    Enregistrer
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Toast Notifications -->
+<div id="toast" class="toast"></div>
+
+<style>
+    .config-container {
+        padding: 2rem;
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+
+    .config-header {
+        text-align: center;
+        margin-bottom: 3rem;
+    }
+
+    .config-title {
+        font-size: 2.5rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.5rem;
+    }
+
+    .config-title i {
+        margin-right: 1rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    .config-subtitle {
+        color: #64748b;
+        font-size: 1.1rem;
+    }
+
+    .config-section {
+        background: white;
+        border-radius: 16px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05), 0 10px 20px rgba(0, 0, 0, 0.05);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .config-section:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 12px rgba(0, 0, 0, 0.08), 0 16px 32px rgba(0, 0, 0, 0.08);
+    }
+
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+        padding-bottom: 1rem;
+        border-bottom: 2px solid #f1f5f9;
+    }
+
+    .section-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #1e293b;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .section-title i {
+        color: #667eea;
+    }
+
+    .btn-add-signature {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        border-radius: 10px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    }
+
+    .btn-add-signature:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    .signatures-table-container {
+        overflow-x: auto;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+    }
+
+    .signatures-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .signatures-table thead {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .signatures-table th {
+        padding: 1rem;
+        text-align: left;
+        font-weight: 600;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .signatures-table td {
+        padding: 1rem;
+        border-bottom: 1px solid #e2e8f0;
+        color: #1e293b;
+        font-size: 0.95rem;
+    }
+
+    .signatures-table td strong {
+        color: #0f172a;
+        font-weight: 700;
+    }
+
+    .signatures-table td code {
+        background: #f1f5f9;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        color: #475569;
+        font-family: 'Fira Code', monospace;
+    }
+
+    .badge {
+        background: #e0e7ff;
+        color: #3730a3;
+        padding: 0.25rem 0.75rem;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+
+    .signatures-table tbody tr {
+        transition: background-color 0.2s ease;
+    }
+
+    .signatures-table tbody tr:hover {
+        background-color: #f8fafc;
+    }
+
+    .severity-badge {
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+
+    .severity-critical {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .severity-high {
+        background: #fed7aa;
+        color: #9a3412;
+    }
+
+    .severity-medium {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .severity-low {
+        background: #dbeafe;
+        color: #1e40af;
+    }
+
+    .action-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0.5rem;
+        margin: 0 0.25rem;
+        border-radius: 6px;
+        transition: all 0.2s ease;
+    }
+
+    .action-btn:hover {
+        background: #f1f5f9;
+    }
+
+    .action-btn.edit {
+        color: #3b82f6;
+    }
+
+    .action-btn.delete {
+        color: #ef4444;
+    }
+
+    .thresholds-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .threshold-card {
+        background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+        border-radius: 12px;
+        padding: 1.5rem;
+        border: 2px solid #e2e8f0;
+        transition: all 0.3s ease;
+    }
+
+    .threshold-card:hover {
+        border-color: #667eea;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+    }
+
+    .threshold-icon {
+        width: 50px;
+        height: 50px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .threshold-icon.dos {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        color: white;
+    }
+
+    .threshold-icon.portscan {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: white;
+    }
+
+    .threshold-icon.ssh {
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        color: white;
+    }
+
+    .threshold-icon.icmp {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+    }
+
+    .threshold-name {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #1e293b;
+        margin-bottom: 0.5rem;
+    }
+
+    .threshold-description {
+        color: #64748b;
+        font-size: 0.9rem;
+        margin-bottom: 1rem;
+    }
+
+    .threshold-control {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .threshold-control input[type="range"] {
+        width: 100%;
+        height: 6px;
+        border-radius: 5px;
+        background: linear-gradient(to right, #667eea 0%, #764ba2 100%);
+        outline: none;
+        -webkit-appearance: none;
+    }
+
+    .threshold-control input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: white;
+        cursor: pointer;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        border: 3px solid #667eea;
+    }
+
+    .threshold-value-container {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .threshold-control input[type="number"] {
+        flex: 1;
+        padding: 0.5rem;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 1rem;
+        font-weight: 600;
+        color: #1e293b;
+        transition: border-color 0.2s ease;
+    }
+
+    .threshold-control input[type="number"]:focus {
+        outline: none;
+        border-color: #667eea;
+    }
+
+    .threshold-unit {
+        color: #64748b;
+        font-weight: 600;
+        min-width: 80px;
+    }
+
+    .save-config-container {
+        text-align: center;
+    }
+
+    .btn-save-config {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        border: none;
+        padding: 1rem 3rem;
+        border-radius: 12px;
+        font-size: 1.1rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    }
+
+    .btn-save-config:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+    }
+
+    /* Modal Styles */
+    .modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(4px);
+        animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+
+        to {
+            opacity: 1;
+        }
+    }
+
+    .modal-content {
+        background-color: white;
+        margin: 5% auto;
+        padding: 0;
+        border-radius: 16px;
+        width: 90%;
+        max-width: 600px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        animation: slideDown 0.3s ease;
+    }
+
+    @keyframes slideDown {
+        from {
+            transform: translateY(-50px);
+            opacity: 0;
+        }
+
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.5rem 2rem;
+        border-bottom: 2px solid #f1f5f9;
+    }
+
+    .modal-header h2 {
+        margin: 0;
+        color: #1e293b;
+        font-size: 1.5rem;
+    }
+
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: #64748b;
+        transition: color 0.2s ease;
+    }
+
+    .modal-close:hover {
+        color: #ef4444;
+    }
+
+    .form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        padding: 2rem;
+    }
+
+    .form-group {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .form-group.full-width {
+        grid-column: 1 / -1;
+    }
+
+    .form-group label {
+        margin-bottom: 0.5rem;
+        color: #475569;
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+
+    .form-group input,
+    .form-group select {
+        padding: 0.75rem;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 1rem;
+        transition: border-color 0.2s ease;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus {
+        outline: none;
+        border-color: #667eea;
+    }
+
+    .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 1rem;
+        padding: 1.5rem 2rem;
+        border-top: 2px solid #f1f5f9;
+    }
+
+    .btn-cancel {
+        background: #f1f5f9;
+        color: #475569;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+    }
+
+    .btn-cancel:hover {
+        background: #e2e8f0;
+    }
+
+    .btn-submit {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s ease;
+    }
+
+    .btn-submit:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    }
+
+    /* Toast Notification */
+    .toast {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        background: white;
+        padding: 1rem 1.5rem;
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        display: none;
+        align-items: center;
+        gap: 0.75rem;
+        z-index: 2000;
+        animation: slideInRight 0.3s ease;
+    }
+
+    @keyframes slideInRight {
+        from {
+            transform: translateX(400px);
+            opacity: 0;
+        }
+
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+
+    .toast.success {
+        border-left: 4px solid #10b981;
+    }
+
+    .toast.error {
+        border-left: 4px solid #ef4444;
+    }
+</style>
+
+<script>
+    let isEditMode = false;
+    let editingSignatureId = null;
+
+    // Charger les signatures au chargement de la page
+    document.addEventListener('DOMContentLoaded', function () {
+        loadSignatures();
+        loadThresholds();
+        setupSliderSync();
+    });
+
+    // Synchroniser les sliders avec les inputs
+    function setupSliderSync() {
+        const pairs = [
+            ['dosVolumeSlider', 'dosVolumeInput'],
+            ['portScanSlider', 'portScanInput'],
+            ['sshBruteforceSlider', 'sshBruteforceInput'],
+            ['icmpFloodSlider', 'icmpFloodInput']
+        ];
+
+        pairs.forEach(([sliderId, inputId]) => {
+            const slider = document.getElementById(sliderId);
+            const input = document.getElementById(inputId);
+
+            slider.addEventListener('input', () => {
+                input.value = slider.value;
+            });
+
+            input.addEventListener('input', () => {
+                slider.value = input.value;
+            });
+        });
+    }
+
+    // Charger les seuils actuels
+    async function loadThresholds() {
+        try {
+            const response = await fetch('/api/config');
+            const config = await response.json();
+
+            if (config.thresholds) {
+                const dosVolumeMB = Math.round(config.thresholds.dos_volume / (1024 * 1024));
+                document.getElementById('dosVolumeSlider').value = dosVolumeMB;
+                document.getElementById('dosVolumeInput').value = dosVolumeMB;
+
+                document.getElementById('portScanSlider').value = config.thresholds.port_scan_max_ports;
+                document.getElementById('portScanInput').value = config.thresholds.port_scan_max_ports;
+
+                document.getElementById('sshBruteforceSlider').value = config.thresholds.ssh_bruteforce_attempts;
+                document.getElementById('sshBruteforceInput').value = config.thresholds.ssh_bruteforce_attempts;
+
+                document.getElementById('icmpFloodSlider').value = config.thresholds.icmp_flood_packets;
+                document.getElementById('icmpFloodInput').value = config.thresholds.icmp_flood_packets;
+            }
+        } catch (error) {
+            console.error('Erreur lors du chargement de la configuration:', error);
+        }
+    }
+
+    // Charger les signatures
+    async function loadSignatures() {
+        try {
+            const response = await fetch('/api/signatures');
+            const signatures = await response.json();
+
+            const tbody = document.getElementById('signaturesTableBody');
+            tbody.innerHTML = '';
+
+            signatures.forEach(sig => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><strong>${sig.id}</strong></td>
+                    <td>${sig.name}</td>
+                    <td><code style="font-size: 0.85rem;">${sig.pattern}</code></td>
+                    <td><span class="badge">${sig.protocol}</span></td>
+                    <td>${sig.port || 'Tous'}</td>
+                    <td><span class="severity-badge severity-${sig.severity.toLowerCase()}">${sig.severity}</span></td>
+                    <td>
+                        <button class="action-btn edit" onclick="editSignature('${sig.id}')" title="Modifier">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="action-btn delete" onclick="deleteSignature('${sig.id}')" title="Supprimer">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        } catch (error) {
+            console.error('Erreur lors du chargement des signatures:', error);
+            showToast('Erreur lors du chargement des signatures', 'error');
+        }
+    }
+
+    // Ouvrir le modal d'ajout
+    function openAddSignatureModal() {
+        isEditMode = false;
+        editingSignatureId = null;
+        document.getElementById('modalTitle').textContent = 'Ajouter une Signature';
+        document.getElementById('signatureForm').reset();
+        document.getElementById('signatureId').disabled = false;
+        document.getElementById('signatureModal').style.display = 'block';
+    }
+
+    // Fermer le modal
+    function closeSignatureModal() {
+        document.getElementById('signatureModal').style.display = 'none';
+    }
+
+    // Éditer une signature
+    async function editSignature(id) {
+        try {
+            const response = await fetch('/api/signatures');
+            const signatures = await response.json();
+            const signature = signatures.find(s => s.id === id);
+
+            if (signature) {
+                isEditMode = true;
+                editingSignatureId = id;
+                document.getElementById('modalTitle').textContent = 'Modifier la Signature';
+                document.getElementById('signatureId').value = signature.id;
+                document.getElementById('signatureId').disabled = true;
+                document.getElementById('signatureName').value = signature.name;
+                document.getElementById('signaturePattern').value = signature.pattern;
+                document.getElementById('signatureProtocol').value = signature.protocol;
+                document.getElementById('signaturePort').value = signature.port || 0;
+                document.getElementById('signatureSeverity').value = signature.severity;
+                document.getElementById('signatureModal').style.display = 'block';
+            }
+        } catch (error) {
+            console.error('Erreur:', error);
+            showToast('Erreur lors du chargement de la signature', 'error');
+        }
+    }
+
+    // Sauvegarder une signature
+    async function saveSignature(event) {
+        event.preventDefault();
+
+        const signatureData = {
+            id: document.getElementById('signatureId').value,
+            name: document.getElementById('signatureName').value,
+            pattern: document.getElementById('signaturePattern').value,
+            protocol: document.getElementById('signatureProtocol').value,
+            port: parseInt(document.getElementById('signaturePort').value),
+            severity: document.getElementById('signatureSeverity').value
+        };
+
+        try {
+            let response;
+            if (isEditMode) {
+                response = await fetch(`/api/signatures/${editingSignatureId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(signatureData)
+                });
+            } else {
+                response = await fetch('/api/signatures', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(signatureData)
+                });
+            }
+
+            const result = await response.json();
+
+            if (response.ok) {
+                showToast(result.message, 'success');
+                closeSignatureModal();
+                loadSignatures();
+            } else {
+                showToast(result.error || 'Erreur lors de la sauvegarde', 'error');
+            }
+        } catch (error) {
+            console.error('Erreur:', error);
+            showToast('Erreur lors de la sauvegarde', 'error');
+        }
+    }
+
+    // Supprimer une signature
+    async function deleteSignature(id) {
+        if (!confirm('Êtes-vous sûr de vouloir supprimer cette signature ?')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/signatures/${id}`, {
+                method: 'DELETE'
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                showToast(result.message, 'success');
+                loadSignatures();
+            } else {
+                showToast(result.error || 'Erreur lors de la suppression', 'error');
+            }
+        } catch (error) {
+            console.error('Erreur:', error);
+            showToast('Erreur lors de la suppression', 'error');
+        }
+    }
+
+    // Sauvegarder les seuils
+    async function saveThresholds() {
+        const dosVolumeMB = parseInt(document.getElementById('dosVolumeInput').value);
+        const dosVolumeBytes = dosVolumeMB * 1024 * 1024;
+
+        const thresholds = {
+            dos_volume: dosVolumeBytes,
+            port_scan_max_ports: parseInt(document.getElementById('portScanInput').value),
+            ssh_bruteforce_attempts: parseInt(document.getElementById('sshBruteforceInput').value),
+            icmp_flood_packets: parseInt(document.getElementById('icmpFloodInput').value)
+        };
+
+        try {
+            const response = await fetch('/api/config/thresholds', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ thresholds })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                showToast('Configuration sauvegardée avec succès !', 'success');
+            } else {
+                showToast(result.error || 'Erreur lors de la sauvegarde', 'error');
+            }
+        } catch (error) {
+            console.error('Erreur:', error);
+            showToast('Erreur lors de la sauvegarde', 'error');
+        }
+    }
+
+    // Afficher un toast
+    function showToast(message, type = 'success') {
+        const toast = document.getElementById('toast');
+        toast.textContent = message;
+        toast.className = `toast ${type}`;
+        toast.style.display = 'flex';
+
+        setTimeout(() => {
+            toast.style.display = 'none';
+        }, 3000);
+    }
+
+    // Fermer le modal en cliquant en dehors
+    window.onclick = function (event) {
+        const modal = document.getElementById('signatureModal');
+        if (event.target === modal) {
+            closeSignatureModal();
+        }
+    }
+</script>
+{% endblock %}

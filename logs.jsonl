@@ -54,3 +54,7 @@
 {"log_id": "6cf3b546-dc61-441a-ac52-69ca88d3bf64", "timestamp": "2026-01-08T10:24:11.797707", "component": "Flask", "event_type": "IDS_START", "message": "IDS d\u00e9marr\u00e9 via l'interface Flask", "details": {}, "user": "Admin"}
 {"log_id": "59d0a1ce-b203-4b0c-939f-c65cf23b6487", "timestamp": "2026-01-08T10:39:23.124814", "component": "IDS", "event_type": "IDS_START", "message": "D\u00e9marrage de la surveillance du trafic r\u00e9seau (IDS).", "details": {}, "user": "Admin"}
 {"log_id": "e2ce2aa8-0a65-4515-a869-83cec4e7dfc1", "timestamp": "2026-01-08T10:39:23.125027", "component": "Flask", "event_type": "IDS_START", "message": "IDS d\u00e9marr\u00e9 via l'interface Flask", "details": {}, "user": "Admin"}
+{"log_id": "f6bfae93-2c8c-48ea-a1a7-92bf6a52b4bd", "timestamp": "2026-01-10T17:47:08.661306", "component": "Flask", "event_type": "IDS_START", "message": "IDS d\u00e9marr\u00e9 via l'interface Flask", "details": {}, "user": "Admin"}
+user": "Admin"}
+{"log_id": "b97bcbef-4942-4703-b527-0539f740ff37", "timestamp": "2026-01-10T17:55:16.958047", "component": "IDS", "event_type": "CONFIG_LOADED", "message": "Configuration charg\u00e9e: DoS=10000000, PortScan=5, SSH=5, ICMP=50", "details": {}, "user": "Admin"}
+{"log_id": "2f4e07a3-dd9e-495a-8ece-6c72246a3e6e", "timestamp": "2026-01-10T18:17:01.995774", "component": "IDS", "event_type": "CONFIG_LOADED", "message": "Configuration charg\u00e9e: DoS=10000000, PortScan=5, SSH=5, ICMP=50", "details": {}, "user": "Admin"}
