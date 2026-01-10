@@ -115,6 +115,14 @@ class NetworkScanner:
         # === Vitesse du scan ===
         args.append(f'-{speed}')  # T1 = lent, T3 = normal, T5 = très rapide
         
+        # === Optimisations de performance ===
+        # Ces paramètres accélèrent significativement les scans
+        if scan_type in ['ports', 'full']:
+            args.append('--min-rate 300')        # Minimum 300 paquets/seconde
+            args.append('--max-retries 1')       # Réduire les tentatives (plus rapide)
+            args.append('--host-timeout 5m')     # Timeout de 5 minutes par hôte
+            args.append('--min-parallelism 100') # Minimum 100 probes en parallèle (très rapide)
+        
         # === Ports spécifiques ===
         if ports and scan_type != 'discovery':
             args.append(f'-p {ports}')
@@ -288,7 +296,7 @@ class NetworkScanner:
     def scan_ports_and_services(self, host_ip, ports='1-1024', detection='none', speed='T3', scan_method='connect'):
         """
         Détecte les ports ouverts et les services/versions (3.1.2, 3.1.3).
-        Utilise des threads pour scanner les ports en parallèle.
+        Optimisé avec une seule commande Nmap qui utilise ses propres optimisations internes.
         
         Args:
             host_ip: adresse IP de l'hôte
@@ -300,123 +308,73 @@ class NetworkScanner:
         options = {'ports': ports, 'detection': detection, 'speed': speed, 'method': scan_method}
         self._log_scan_start("Port/Service Scan", host_ip, options)
         
-        # Diviser les ports en groupes pour scan parallèle
-        def parse_port_range(port_string):
-            """Convertit une chaîne de ports en liste de ports individuels."""
-            port_list = []
-            for part in port_string.split(','):
-                if '-' in part:
-                    start, end = map(int, part.split('-'))
-                    port_list.extend(range(start, end + 1))
-                else:
-                    port_list.append(int(part))
-            return port_list
+        # Scanner tous les ports en une seule commande Nmap optimisée
+        # Nmap gère déjà la parallélisation en interne de manière optimale
+        all_ports = {}
         
         try:
-            port_list = parse_port_range(ports)
-            total_ports = len(port_list)
-            
-            # Diviser les ports en groupes pour parallélisation
-            # Chaque thread scannera un groupe de ports
-            ports_per_thread = max(1, total_ports // self.max_threads)
-            port_groups = []
-            
-            for i in range(0, total_ports, ports_per_thread):
-                group = port_list[i:i + ports_per_thread]
-                if group:
-                    # Convertir la liste de ports en chaîne pour Nmap
-                    port_groups.append(','.join(map(str, group)))
+            # Construire les arguments Nmap avec optimisations
+            args = self._build_nmap_arguments('ports', ports=ports, detection=detection, speed=speed, scan_method=scan_method)
             
             self.log_manager.log(
-                f"Scan de {total_ports} ports sur {host_ip} divisé en {len(port_groups)} groupes avec {self.max_threads} threads",
-                event_type="PORT_SCAN_PARALLEL_START",
+                f"Scan de ports sur {host_ip} avec arguments optimisés: {args}",
+                event_type="PORT_SCAN_START",
                 component="NetworkScanner",
-                details={'host': host_ip, 'total_ports': total_ports, 'groups': len(port_groups), 'threads': self.max_threads}
+                details={'host': host_ip, 'ports': ports, 'args': args}
+            )
+            
+            # Exécuter le scan Nmap
+            self.nm.scan(hosts=host_ip, arguments=args)
+            
+            # Collecter les résultats
+            if host_ip in self.nm.all_hosts() and 'tcp' in self.nm[host_ip]:
+                for port, data in self.nm[host_ip]['tcp'].items():
+                    if data['state'] == 'open':
+                        service = data.get('name', 'unknown')
+                        version = data.get('version', 'N/A')
+                        product = data.get('product', '')
+                        
+                        # Format différent selon le niveau de détection
+                        if detection == 'services':
+                            service_info = f"{service} {product} {version}".strip()
+                        else:
+                            service_info = service
+                        
+                        all_ports[port] = service_info
+                        
+                        self.log_manager.log(
+                            f"Port ouvert détecté sur {host_ip}: {port}/tcp - Service: {service_info}",
+                            event_type="PORT_OPEN",
+                            component="NetworkScanner",
+                            details={"ip": host_ip, "port": port, "service": service, "version": version}
+                        )
+            
+            # Mettre à jour l'hôte avec les ports trouvés
+            if host_ip not in self.active_hosts:
+                self.active_hosts[host_ip] = Host(host_ip, "")
+            
+            host = self.active_hosts[host_ip]
+            host.ports.update(all_ports)
+            
+            self.log_manager.log(
+                f"Scan de ports terminé sur {host_ip}: {len(all_ports)} ports ouverts trouvés (scan optimisé)",
+                event_type="PORT_SCAN_END",
+                component="NetworkScanner",
+                details={'host': host_ip, 'open_ports': len(all_ports)}
+            )
+            
+        except nmap.PortScannerError as e:
+            self.log_manager.log(
+                f"Erreur Nmap lors du scan de {host_ip}: {e}",
+                event_type="ERROR",
+                component="NetworkScanner"
             )
         except Exception as e:
-            self.log_manager.log(f"Erreur lors du parsing des ports: {e}", event_type="ERROR", component="NetworkScanner")
-            port_groups = [ports]  # Fallback au scan normal
-        
-        # Fonction pour scanner un groupe de ports
-        def scan_port_group(port_group, group_id):
-            nm = nmap.PortScanner()
-            ports_found = {}
-            try:
-                args = self._build_nmap_arguments('ports', ports=port_group, detection=detection, speed=speed, scan_method=scan_method)
-                nm.scan(hosts=host_ip, arguments=args)
-                
-                if host_ip in nm.all_hosts() and 'tcp' in nm[host_ip]:
-                    for port, data in nm[host_ip]['tcp'].items():
-                        if data['state'] == 'open':
-                            service = data.get('name', 'unknown')
-                            version = data.get('version', 'N/A')
-                            product = data.get('product', '')
-                            
-                            # Format différent selon le niveau de détection
-                            if detection == 'services':
-                                service_info = f"{service} {product} {version}".strip()
-                            else:
-                                service_info = service
-                            
-                            ports_found[port] = service_info
-                            
-                            self.log_manager.log(
-                                f"Port ouvert détecté sur {host_ip}: {port}/tcp - Service: {service_info}",
-                                event_type="PORT_OPEN",
-                                component="NetworkScanner",
-                                details={"ip": host_ip, "port": port, "service": service, "version": version}
-                            )
-            except nmap.PortScannerError as e:
-                self.log_manager.log(
-                    f"Erreur Nmap lors du scan du groupe {group_id} sur {host_ip}: {e}", 
-                    event_type="ERROR", 
-                    component="NetworkScanner"
-                )
-            return ports_found
-        
-        # Scanner tous les groupes de ports en parallèle
-        all_ports = {}
-        try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=min(self.max_threads, len(port_groups))) as executor:
-                # Soumettre toutes les tâches de scan de groupes de ports
-                future_to_group = {executor.submit(scan_port_group, group, idx): idx for idx, group in enumerate(port_groups)}
-                
-                completed_count = 0
-                total_groups = len(future_to_group)
-                
-                for future in concurrent.futures.as_completed(future_to_group):
-                    group_id = future_to_group[future]
-                    try:
-                        ports = future.result()
-                        all_ports.update(ports)
-                        completed_count += 1
-                        
-                        # Log de progression
-                        if completed_count % max(1, total_groups // 4) == 0 or completed_count == total_groups:
-                            self.log_manager.log(
-                                f"Progression scan ports {host_ip}: {completed_count}/{total_groups} groupes scannés ({len(all_ports)} ports ouverts)",
-                                event_type="PORT_SCAN_PROGRESS",
-                                component="NetworkScanner",
-                                details={'completed': completed_count, 'total': total_groups, 'open_ports': len(all_ports)}
-                            )
-                    except Exception as exc:
-                        self.log_manager.log(f"Erreur lors du scan du groupe {group_id}: {exc}", event_type="ERROR", component="NetworkScanner")
-        except Exception as e:
-            self.log_manager.log(f"Erreur lors du scan parallèle de ports: {e}", event_type="ERROR", component="NetworkScanner")
-        
-        # Mettre à jour l'hôte avec les ports trouvés
-        if host_ip not in self.active_hosts:
-            self.active_hosts[host_ip] = Host(host_ip, "")
-        
-        host = self.active_hosts[host_ip]
-        host.ports.update(all_ports)
-        
-        self.log_manager.log(
-            f"Scan de ports terminé sur {host_ip}: {len(all_ports)} ports ouverts trouvés avec {self.max_threads} threads",
-            event_type="PORT_SCAN_PARALLEL_END",
-            component="NetworkScanner",
-            details={'host': host_ip, 'open_ports': len(all_ports), 'threads': self.max_threads}
-        )
+            self.log_manager.log(
+                f"Erreur lors du scan de ports sur {host_ip}: {e}",
+                event_type="ERROR",
+                component="NetworkScanner"
+            )
         
         self._log_scan_end("Port/Service Scan", host_ip, len(all_ports))
         return all_ports
