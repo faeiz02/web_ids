@@ -1,8 +1,11 @@
 {
   "thresholds": {
-    "dos_volume": 10000000,
+    "dos_volume": 10485760,
     "port_scan_max_ports": 5,
     "ssh_bruteforce_attempts": 5,
     "icmp_flood_packets": 50
+  },
+  "scanner": {
+    "max_threads": 100
   }
 }

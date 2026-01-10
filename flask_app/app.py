@@ -39,6 +39,9 @@ ids = IDS(alert_manager, log_manager)
 # Variables globales pour le suivi des scans
 scan_in_progress = False
 current_scan_status = "Prêt"
+last_manual_scan_host = None  # Stocke le dernier hôte scanné manuellement
+scan_mode = "full"  # "full" pour scan complet, "manual" pour scan manuel
+
 
 
 # ============================================================================
@@ -127,9 +130,11 @@ def perform_full_scan():
     speed = 'T4' # Default speed since user removed control
     
     def run_scan():
-        global scan_in_progress, current_scan_status
+        global scan_in_progress, current_scan_status, scan_mode, last_manual_scan_host
         try:
             scan_in_progress = True
+            scan_mode = "full"  # Mode scan complet
+            last_manual_scan_host = None  # Réinitialiser le dernier hôte manuel
             current_scan_status = f"Scan en cours sur {target_range} (Méthode: {scan_method})..."
             scanner.perform_full_network_scan(target_range, ports, speed=speed, scan_method=scan_method)
             current_scan_status = "Scan terminé"
@@ -138,6 +143,7 @@ def perform_full_scan():
             log_manager.log(f"Erreur lors du scan: {str(e)}", event_type="ERROR", component="Flask")
         finally:
             scan_in_progress = False
+
     
     # Lancer le scan dans un thread séparé
     scan_thread = threading.Thread(target=run_scan, daemon=True)
@@ -182,9 +188,11 @@ def scan_ports():
         return jsonify({'error': 'Adresse IP requise'}), 400
     
     def run_scan():
-        global scan_in_progress, current_scan_status
+        global scan_in_progress, current_scan_status, last_manual_scan_host, scan_mode
         try:
             scan_in_progress = True
+            scan_mode = "manual"  # Mode scan manuel
+            last_manual_scan_host = host_ip  # Stocker l'IP du dernier hôte scanné manuellement AVANT le scan
             current_scan_status = f"Scan de ports sur {host_ip} (Méthode: {scan_method})..."
             scanner.scan_ports_and_services(host_ip, ports, speed=speed, scan_method=scan_method)
             current_scan_status = "Scan terminé"
@@ -202,18 +210,37 @@ def scan_ports():
 
 @app.route('/api/hosts', methods=['GET'])
 def get_hosts():
-    """Retourne la liste des hôtes actifs."""
+    """Retourne la liste des hôtes actifs.
+    En mode manuel, retourne seulement le dernier hôte scanné.
+    En mode complet, retourne tous les hôtes.
+    """
+    global scan_mode, last_manual_scan_host
+    
     hosts = scanner.get_active_hosts()
     hosts_data = []
     
-    for host in hosts:
-        host_data = {
-            'ip_address': host.ip_address,
-            'hostname': host.hostname,
-            'is_active': host.is_active,
-            'ports': host.ports
-        }
-        hosts_data.append(host_data)
+    # Si on est en mode manuel et qu'un hôte a été scanné, afficher seulement celui-là
+    if scan_mode == "manual" and last_manual_scan_host:
+        for host in hosts:
+            if host.ip_address == last_manual_scan_host:
+                host_data = {
+                    'ip_address': host.ip_address,
+                    'hostname': host.hostname,
+                    'is_active': host.is_active,
+                    'ports': host.ports
+                }
+                hosts_data.append(host_data)
+                break
+    else:
+        # Mode complet : afficher tous les hôtes
+        for host in hosts:
+            host_data = {
+                'ip_address': host.ip_address,
+                'hostname': host.hostname,
+                'is_active': host.is_active,
+                'ports': host.ports
+            }
+            hosts_data.append(host_data)
     
     return jsonify(hosts_data)
 
@@ -478,47 +505,73 @@ def get_config():
 
 @app.route('/api/config/thresholds', methods=['PUT'])
 def update_thresholds():
-    """Met à jour les seuils de détection de l'IDS."""
+    """Met à jour les seuils de détection de l'IDS et la configuration du scanner."""
     data = request.get_json()
     
-    if not data or 'thresholds' not in data:
+    if not data:
         return jsonify({'error': 'Données invalides'}), 400
     
-    thresholds = data['thresholds']
+    # Mise à jour des seuils IDS
+    if 'thresholds' in data:
+        thresholds = data['thresholds']
+        
+        # Validation des données
+        try:
+            dos_volume = int(thresholds.get('dos_volume', ids.volume_threshold))
+            port_scan_max_ports = int(thresholds.get('port_scan_max_ports', ids.port_scan_threshold))
+            ssh_bruteforce_attempts = int(thresholds.get('ssh_bruteforce_attempts', ids.ssh_bruteforce_threshold))
+            icmp_flood_packets = int(thresholds.get('icmp_flood_packets', ids.icmp_flood_threshold))
+        except ValueError:
+            return jsonify({'error': 'Les valeurs doivent être des entiers'}), 400
+        
+        # Mettre à jour les seuils dans l'IDS
+        ids.update_thresholds(
+            dos_volume=dos_volume,
+            port_scan_max_ports=port_scan_max_ports,
+            ssh_bruteforce_attempts=ssh_bruteforce_attempts,
+            icmp_flood_packets=icmp_flood_packets
+        )
     
-    # Validation des données
-    try:
-        dos_volume = int(thresholds.get('dos_volume', ids.volume_threshold))
-        port_scan_max_ports = int(thresholds.get('port_scan_max_ports', ids.port_scan_threshold))
-        ssh_bruteforce_attempts = int(thresholds.get('ssh_bruteforce_attempts', ids.ssh_bruteforce_threshold))
-        icmp_flood_packets = int(thresholds.get('icmp_flood_packets', ids.icmp_flood_threshold))
-    except ValueError:
-        return jsonify({'error': 'Les valeurs doivent être des entiers'}), 400
-    
-    # Mettre à jour les seuils dans l'IDS
-    ids.update_thresholds(
-        dos_volume=dos_volume,
-        port_scan_max_ports=port_scan_max_ports,
-        ssh_bruteforce_attempts=ssh_bruteforce_attempts,
-        icmp_flood_packets=icmp_flood_packets
-    )
+    # Mise à jour de la configuration du scanner
+    scanner_config = {}
+    if 'scanner' in data:
+        scanner_data = data['scanner']
+        try:
+            max_threads = int(scanner_data.get('max_threads', scanner.max_threads))
+            scanner.update_max_threads(max_threads)
+            scanner_config = {'max_threads': max_threads}
+        except ValueError:
+            return jsonify({'error': 'Le nombre de threads doit être un entier'}), 400
     
     # Sauvegarder dans le fichier config.json
     config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config.json')
     try:
-        config = {'thresholds': {
-            'dos_volume': dos_volume,
-            'port_scan_max_ports': port_scan_max_ports,
-            'ssh_bruteforce_attempts': ssh_bruteforce_attempts,
-            'icmp_flood_packets': icmp_flood_packets
-        }}
+        config = {}
+        if 'thresholds' in data:
+            config['thresholds'] = {
+                'dos_volume': dos_volume,
+                'port_scan_max_ports': port_scan_max_ports,
+                'ssh_bruteforce_attempts': ssh_bruteforce_attempts,
+                'icmp_flood_packets': icmp_flood_packets
+            }
+        if scanner_config:
+            config['scanner'] = scanner_config
+        
+        # Charger la config existante et la fusionner
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                existing_config = json.load(f)
+                existing_config.update(config)
+                config = existing_config
+        
         with open(config_path, 'w') as f:
             json.dump(config, f, indent=2)
         
-        log_manager.log("Configuration des seuils mise à jour via l'API", event_type="CONFIG_UPDATE", component="Flask")
-        return jsonify({'message': 'Configuration mise à jour avec succès', 'thresholds': config['thresholds']})
+        log_manager.log("Configuration mise à jour via l'API", event_type="CONFIG_UPDATE", component="Flask")
+        return jsonify({'message': 'Configuration mise à jour avec succès', 'config': config})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 
 @app.route('/api/signatures', methods=['GET'])
