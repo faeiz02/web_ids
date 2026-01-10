@@ -24,8 +24,10 @@ class NetworkScanner:
         self.stop_event = concurrent.futures.Future()  # Flag pour arrêter les scans
         self.stop_requested = False  # Indicateur d'arrêt demandé
         
-        # Nombre de threads pour les scans parallèles (configurable)
-        self.max_threads = 30  # Valeur par défaut
+        # Paramètres de performance configurables
+        self.max_threads = 30  # Nombre de threads pour scanner plusieurs hôtes
+        self.min_parallelism = 100  # Nombre de probes parallèles Nmap par hôte
+        self.min_rate = 300  # Débit minimum en paquets/seconde
         self._load_config()
 
     def _load_config(self):
@@ -38,14 +40,17 @@ class NetworkScanner:
                     config = json.load(f)
                     scanner_config = config.get('scanner', {})
                     self.max_threads = scanner_config.get('max_threads', 30)
-                    self.log_manager.log(f"Configuration du scanner chargée: max_threads={self.max_threads}", event_type="CONFIG_LOADED", component="NetworkScanner")
+                    self.min_parallelism = scanner_config.get('min_parallelism', 100)
+                    self.min_rate = scanner_config.get('min_rate', 300)
+                    self.log_manager.log(
+                        f"Configuration du scanner chargée: max_threads={self.max_threads}, min_parallelism={self.min_parallelism}, min_rate={self.min_rate}",
+                        event_type="CONFIG_LOADED",
+                        component="NetworkScanner"
+                    )
             except Exception as e:
                 self.log_manager.log(f"Erreur lors du chargement de la configuration du scanner: {e}", event_type="ERROR", component="NetworkScanner")
 
-    def update_max_threads(self, max_threads):
-        """Met à jour le nombre maximum de threads pour les scans parallèles."""
-        self.max_threads = max_threads
-        self.log_manager.log(f"Nombre de threads mis à jour: {self.max_threads}", event_type="CONFIG_UPDATED", component="NetworkScanner")
+
 
     def stop_scan(self):
         """
@@ -118,10 +123,10 @@ class NetworkScanner:
         # === Optimisations de performance ===
         # Ces paramètres accélèrent significativement les scans
         if scan_type in ['ports', 'full']:
-            args.append('--min-rate 300')        # Minimum 300 paquets/seconde
-            args.append('--max-retries 1')       # Réduire les tentatives (plus rapide)
-            args.append('--host-timeout 5m')     # Timeout de 5 minutes par hôte
-            args.append('--min-parallelism 100') # Minimum 100 probes en parallèle (très rapide)
+            args.append(f'--min-rate {self.min_rate}')        # Débit minimum configurable
+            args.append('--max-retries 1')                     # Réduire les tentatives (plus rapide)
+            args.append('--host-timeout 5m')                   # Timeout de 5 minutes par hôte
+            args.append(f'--min-parallelism {self.min_parallelism}')  # Parallélisme configurable
         
         # === Ports spécifiques ===
         if ports and scan_type != 'discovery':

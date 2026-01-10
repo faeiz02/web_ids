@@ -132,31 +132,102 @@
         <div class="config-section" style="margin-top: 2rem;">
             <div class="section-header">
                 <h2 class="section-title">
-                    <i class="fas fa-server"></i>
-                    Configuration du Scanner Réseau
+                    <i class="fas fa-tachometer-alt"></i>
+                    Profils de Performance du Scanner
                 </h2>
             </div>
 
-            <div class="thresholds-grid">
-                <!-- Threads de Scan -->
+            <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+                Choisissez un profil prédéfini ou ajustez manuellement les paramètres de scan.
+            </p>
+
+            <!-- Profile Selection -->
+            <div class="profile-selector">
+                <button type="button" class="profile-btn" onclick="applyProfile('fast')" data-profile="fast">
+                    <i class="fas fa-rocket"></i>
+                    <div>Réseau Local Rapide</div>
+                    <small>Parallelism: 150 | Rate: 400 | Threads: 30</small>
+                </button>
+                <button type="button" class="profile-btn active" onclick="applyProfile('normal')" data-profile="normal">
+                    <i class="fas fa-network-wired"></i>
+                    <div>Réseau Normal</div>
+                    <small>Parallelism: 75 | Rate: 250 | Threads: 20</small>
+                </button>
+                <button type="button" class="profile-btn" onclick="applyProfile('slow')" data-profile="slow">
+                    <i class="fas fa-turtle"></i>
+                    <div>Réseau Lent/Distant</div>
+                    <small>Parallelism: 35 | Rate: 150 | Threads: 10</small>
+                </button>
+                <button type="button" class="profile-btn" onclick="applyProfile('aggressive')"
+                    data-profile="aggressive">
+                    <i class="fas fa-fire"></i>
+                    <div>Maximum Agressif</div>
+                    <small>Parallelism: 500 | Rate: 1000 | Threads: 50</small>
+                </button>
+            </div>
+
+            <!-- Manual Configuration -->
+            <div class="thresholds-grid" style="margin-top: 2rem;">
                 <div class="threshold-card">
                     <div class="threshold-icon threads">
                         <i class="fas fa-server"></i>
                     </div>
                     <div class="threshold-content">
-                        <h3 class="threshold-name">Threads de Scan</h3>
-                        <p class="threshold-description">Nombre de threads pour les scans parallèles</p>
+                        <h3 class="threshold-name">Threads Parallèles</h3>
+                        <p class="threshold-description">Nombre d'hôtes scannés simultanément</p>
                         <div class="threshold-control">
-                            <input type="range" id="scanThreadsSlider" min="1" max="100" value="30" step="1">
+                            <input type="range" id="maxThreadsSlider" min="1" max="100" value="20" step="1">
                             <div class="threshold-value-container">
-                                <input type="number" id="scanThreadsInput" min="1" max="100" value="30" step="1">
+                                <input type="number" id="maxThreadsInput" min="1" max="100" value="20" step="1">
                                 <span class="threshold-unit">threads</span>
                             </div>
                         </div>
                     </div>
                 </div>
+
+                <div class="threshold-card">
+                    <div class="threshold-icon parallelism">
+                        <i class="fas fa-stream"></i>
+                    </div>
+                    <div class="threshold-content">
+                        <h3 class="threshold-name">Parallélisme Nmap</h3>
+                        <p class="threshold-description">Probes parallèles par hôte</p>
+                        <div class="threshold-control">
+                            <input type="range" id="minParallelismSlider" min="1" max="1000" value="75" step="10">
+                            <div class="threshold-value-container">
+                                <input type="number" id="minParallelismInput" min="1" max="1000" value="75" step="10">
+                                <span class="threshold-unit">probes</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="threshold-card">
+                    <div class="threshold-icon rate">
+                        <i class="fas fa-gauge-high"></i>
+                    </div>
+                    <div class="threshold-content">
+                        <h3 class="threshold-name">Débit Minimum</h3>
+                        <p class="threshold-description">Paquets par seconde</p>
+                        <div class="threshold-control">
+                            <input type="range" id="minRateSlider" min="1" max="10000" value="250" step="50">
+                            <div class="threshold-value-container">
+                                <input type="number" id="minRateInput" min="1" max="10000" value="250" step="50">
+                                <span class="threshold-unit">pkt/s</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="save-config-container" style="margin-top: 2rem;">
+                <button class="btn-save-config" onclick="saveScannerConfig()">
+                    <i class="fas fa-save"></i>
+                    Enregistrer la Configuration Scanner
+                </button>
             </div>
         </div>
+
 
 
         <div class="save-config-container">
@@ -553,6 +624,64 @@
         min-width: 80px;
     }
 
+    /* Profile Selector Styles */
+    .profile-selector {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .profile-btn {
+        background: white;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 1.5rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        text-align: center;
+    }
+
+    .profile-btn:hover {
+        border-color: #667eea;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+    }
+
+    .profile-btn.active {
+        border-color: #667eea;
+        background: linear-gradient(135deg, #f8fafc 0%, #e0e7ff 100%);
+    }
+
+    .profile-btn i {
+        font-size: 2rem;
+        color: #667eea;
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+
+    .profile-btn div {
+        font-weight: 600;
+        color: #1e293b;
+        margin-bottom: 0.25rem;
+    }
+
+    .profile-btn small {
+        color: #64748b;
+        font-size: 0.75rem;
+        display: block;
+    }
+
+    .threshold-icon.parallelism {
+        background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+        color: white;
+    }
+
+    .threshold-icon.rate {
+        background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+        color: white;
+    }
+
     .save-config-container {
         text-align: center;
     }
@@ -786,6 +915,7 @@
         loadSignatures();
         loadThresholds();
         setupSliderSync();
+        setupScannerSliderSync();
     });
 
     // Synchroniser les sliders avec les inputs
@@ -795,7 +925,7 @@
             ['portScanSlider', 'portScanInput'],
             ['sshBruteforceSlider', 'sshBruteforceInput'],
             ['icmpFloodSlider', 'icmpFloodInput'],
-            ['scanThreadsSlider', 'scanThreadsInput']
+
         ];
 
         pairs.forEach(([sliderId, inputId]) => {
@@ -809,6 +939,81 @@
             input.addEventListener('input', () => {
                 slider.value = input.value;
             });
+        });
+    }
+
+    // Scanner Performance Profiles
+    const scannerProfiles = {
+        fast: { max_threads: 30, min_parallelism: 150, min_rate: 400 },
+        normal: { max_threads: 20, min_parallelism: 75, min_rate: 250 },
+        slow: { max_threads: 10, min_parallelism: 35, min_rate: 150 },
+        aggressive: { max_threads: 50, min_parallelism: 500, min_rate: 1000 }
+    };
+
+    function applyProfile(profileName) {
+        const profile = scannerProfiles[profileName];
+
+        // Update slider and input values
+        document.getElementById('maxThreadsSlider').value = profile.max_threads;
+        document.getElementById('maxThreadsInput').value = profile.max_threads;
+        document.getElementById('minParallelismSlider').value = profile.min_parallelism;
+        document.getElementById('minParallelismInput').value = profile.min_parallelism;
+        document.getElementById('minRateSlider').value = profile.min_rate;
+        document.getElementById('minRateInput').value = profile.min_rate;
+
+        // Update active button
+        document.querySelectorAll('.profile-btn').forEach(btn => btn.classList.remove('active'));
+        const activeBtn = document.querySelector(`[data-profile="${profileName}"]`);
+        if (activeBtn) {
+            activeBtn.classList.add('active');
+        }
+    }
+
+    async function saveScannerConfig() {
+        const config = {
+            scanner: {
+                max_threads: parseInt(document.getElementById('maxThreadsInput').value),
+                min_parallelism: parseInt(document.getElementById('minParallelismInput').value),
+                min_rate: parseInt(document.getElementById('minRateInput').value)
+            }
+        };
+
+        try {
+            const response = await fetch('/api/config/scanner', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                showToast('Configuration scanner enregistrée avec succès !', 'success');
+            } else {
+                showToast('Erreur: ' + data.error, 'error');
+            }
+        } catch (error) {
+            console.error('Error saving scanner config:', error);
+            showToast('Erreur de connexion', 'error');
+        }
+    }
+
+    // Setup slider synchronization for scanner parameters
+    function setupScannerSliderSync() {
+        const scannerPairs = [
+            ['maxThreadsSlider', 'maxThreadsInput'],
+            ['minParallelismSlider', 'minParallelismInput'],
+            ['minRateSlider', 'minRateInput']
+        ];
+
+        scannerPairs.forEach(([sliderId, inputId]) => {
+            const slider = document.getElementById(sliderId);
+            const input = document.getElementById(inputId);
+
+            if (slider && input) {
+                slider.addEventListener('input', () => input.value = slider.value);
+                input.addEventListener('input', () => slider.value = input.value);
+            }
         });
     }
 
@@ -1000,9 +1205,7 @@
                 ssh_bruteforce_attempts: parseInt(document.getElementById('sshBruteforceInput').value),
                 icmp_flood_packets: parseInt(document.getElementById('icmpFloodInput').value)
             },
-            scanner: {
-                max_threads: parseInt(document.getElementById('scanThreadsInput').value)
-            }
+
         };
 
         try {

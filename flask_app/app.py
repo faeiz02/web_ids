@@ -505,7 +505,7 @@ def get_config():
 
 @app.route('/api/config/thresholds', methods=['PUT'])
 def update_thresholds():
-    """Met à jour les seuils de détection de l'IDS et la configuration du scanner."""
+    """Met à jour les seuils de détection de l'IDS."""
     data = request.get_json()
     
     if not data:
@@ -532,17 +532,6 @@ def update_thresholds():
             icmp_flood_packets=icmp_flood_packets
         )
     
-    # Mise à jour de la configuration du scanner
-    scanner_config = {}
-    if 'scanner' in data:
-        scanner_data = data['scanner']
-        try:
-            max_threads = int(scanner_data.get('max_threads', scanner.max_threads))
-            scanner.update_max_threads(max_threads)
-            scanner_config = {'max_threads': max_threads}
-        except ValueError:
-            return jsonify({'error': 'Le nombre de threads doit être un entier'}), 400
-    
     # Sauvegarder dans le fichier config.json
     config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config.json')
     try:
@@ -554,8 +543,6 @@ def update_thresholds():
                 'ssh_bruteforce_attempts': ssh_bruteforce_attempts,
                 'icmp_flood_packets': icmp_flood_packets
             }
-        if scanner_config:
-            config['scanner'] = scanner_config
         
         # Charger la config existante et la fusionner
         if os.path.exists(config_path):
@@ -571,6 +558,65 @@ def update_thresholds():
         return jsonify({'message': 'Configuration mise à jour avec succès', 'config': config})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/config/scanner', methods=['PUT'])
+def update_scanner_config():
+    """Met à jour la configuration du scanner (profils de performance)."""
+    data = request.get_json()
+    
+    if not data or 'scanner' not in data:
+        return jsonify({'error': 'Données invalides'}), 400
+    
+    scanner_data = data['scanner']
+    
+    try:
+        max_threads = int(scanner_data.get('max_threads', 30))
+        min_parallelism = int(scanner_data.get('min_parallelism', 100))
+        min_rate = int(scanner_data.get('min_rate', 300))
+        
+        # Validation des valeurs
+        if not (1 <= max_threads <= 100):
+            return jsonify({'error': 'max_threads doit être entre 1 et 100'}), 400
+        if not (1 <= min_parallelism <= 1000):
+            return jsonify({'error': 'min_parallelism doit être entre 1 et 1000'}), 400
+        if not (1 <= min_rate <= 10000):
+            return jsonify({'error': 'min_rate doit être entre 1 et 10000'}), 400
+        
+        # Mettre à jour le scanner en mémoire
+        scanner.max_threads = max_threads
+        scanner.min_parallelism = min_parallelism
+        scanner.min_rate = min_rate
+        
+        # Sauvegarder dans config.json
+        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config.json')
+        
+        config = {}
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+        
+        config['scanner'] = {
+            'max_threads': max_threads,
+            'min_parallelism': min_parallelism,
+            'min_rate': min_rate
+        }
+        
+        with open(config_path, 'w') as f:
+            json.dump(config, f, indent=2)
+        
+        log_manager.log(
+            f"Configuration scanner mise à jour: threads={max_threads}, parallelism={min_parallelism}, rate={min_rate}",
+            event_type="CONFIG_UPDATE",
+            component="Flask"
+        )
+        return jsonify({'message': 'Configuration scanner mise à jour avec succès', 'config': config['scanner']})
+        
+    except ValueError:
+        return jsonify({'error': 'Les valeurs doivent être des entiers'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 
 

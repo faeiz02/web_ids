@@ -6,6 +6,8 @@
     "icmp_flood_packets": 50
   },
   "scanner": {
-    "max_threads": 100
+    "max_threads": 50,
+    "min_parallelism": 151,
+    "min_rate": 1301
   }
 }
