@@ -20,7 +20,6 @@ from models import Host, Alert, Log
 from managers import LogManager, AlertManager
 from scanner import NetworkScanner
 from ids import IDS
-from utils import visualize_alerts_by_type, visualize_traffic_volume
 
 # Initialisation de l'application Flask
 app = Flask(__name__, template_folder='templates', static_folder='static')
@@ -126,6 +125,7 @@ def perform_full_scan():
     data = request.get_json()
     target_range = data.get('target_range', '192.168.1.0/24')
     ports = data.get('ports', '1-100')
+    detection = data.get('detection', 'none')  # Extraction du paramètre de détection
     scan_method = data.get('scan_method', 'connect')
     speed = 'T4' # Default speed since user removed control
     
@@ -135,8 +135,8 @@ def perform_full_scan():
             scan_in_progress = True
             scan_mode = "full"  # Mode scan complet
             last_manual_scan_host = None  # Réinitialiser le dernier hôte manuel
-            current_scan_status = f"Scan en cours sur {target_range} (Méthode: {scan_method})..."
-            scanner.perform_full_network_scan(target_range, ports, speed=speed, scan_method=scan_method)
+            current_scan_status = f"Scan en cours sur {target_range} (Méthode: {scan_method}, Détection: {detection})..."
+            scanner.perform_full_network_scan(target_range, ports, detection=detection, speed=speed, scan_method=scan_method)
             current_scan_status = "Scan terminé"
         except Exception as e:
             current_scan_status = f"Erreur: {str(e)}"
@@ -181,6 +181,7 @@ def scan_ports():
     data = request.get_json()
     host_ip = data.get('host_ip')
     ports = data.get('ports', '1-1024')
+    detection = data.get('detection', 'none')  # Extraction du paramètre de détection
     scan_method = data.get('scan_method', 'connect')
     speed = 'T4'
     
@@ -193,8 +194,8 @@ def scan_ports():
             scan_in_progress = True
             scan_mode = "manual"  # Mode scan manuel
             last_manual_scan_host = host_ip  # Stocker l'IP du dernier hôte scanné manuellement AVANT le scan
-            current_scan_status = f"Scan de ports sur {host_ip} (Méthode: {scan_method})..."
-            scanner.scan_ports_and_services(host_ip, ports, speed=speed, scan_method=scan_method)
+            current_scan_status = f"Scan de ports sur {host_ip} (Méthode: {scan_method}, Détection: {detection})..."
+            scanner.scan_ports_and_services(host_ip, ports, detection=detection, speed=speed, scan_method=scan_method)
             current_scan_status = "Scan terminé"
         except Exception as e:
             current_scan_status = f"Erreur: {str(e)}"

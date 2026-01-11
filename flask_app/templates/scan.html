@@ -65,7 +65,7 @@
 
                 <h4 style="margin-bottom: 1.5rem; color: var(--text-primary);"><i class="fas fa-sliders-h"></i> Options
                     de Scan</h4>
-                <div class="grid grid-3">
+                <div class="grid grid-2">
                     <div class="form-group">
                         <label class="form-label" for="detection">Options de Détection</label>
                         <select class="form-select" id="detection">
@@ -85,18 +85,6 @@
                         <small style="color: var(--text-tertiary); display: block; margin-top: 0.5rem;">
                             Connect: Standard Windows. SYN: Stealth / Root.
                         </small>
-                    </div>
-
-                    <div class="form-group">
-                        <label class="form-label" for="format">Format des Résultats</label>
-                        <select class="form-select" id="format">
-                            <option value="normal" selected>Normal</option>
-                            <option value="detailed">Détaillé</option>
-                            <option value="xml">XML</option>
-                            <option value="json">JSON</option>
-                        </select>
-                        <small style="color: var(--text-tertiary); display: block; margin-top: 0.5rem;">Format de sortie
-                            pour les résultats.</small>
                     </div>
                 </div>
 
@@ -196,6 +184,12 @@
         grid-template-columns: repeat(3, 1fr);
         gap: 1.5rem;
     }
+
+    .grid-2 {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.5rem;
+    }
 </style>
 
 <script>
@@ -237,16 +231,9 @@
 
         const ports = document.getElementById('portsRange').value;
         const detection = document.getElementById('detection').value;
-        // speed est retiré, on utilise hardcoded 'T4' dans le backend ou on l'envoie manuellement si on veut garder l'API générique
-        // const speed = document.getElementById('speed').value; 
         const scan_method = document.getElementById('scanMethod').value;
-        const format = document.getElementById('format').value;
         let target;
         let scanFunction;
-
-        // Structure simple pour l'appel API
-        // On n'envoie PAS 'speed' car le select n'existe plus
-        // Le backend (app.py) mettra la vitesse par défaut.
 
         if (currentScanType === 'full') {
             target = document.getElementById('targetRange').value;
@@ -374,6 +361,16 @@
                 } else {
                     updateScanStatus(false, 'Scan terminé');
                     Toast.success('Scan terminé');
+
+                    // Store scan completion info for display
+                    const scanInfo = {
+                        timestamp: new Date().toLocaleString('fr-FR'),
+                        target: currentScanType === 'full' ?
+                            document.getElementById('targetRange').value :
+                            document.getElementById('hostIP').value,
+                        type: currentScanType === 'full' ? 'Scan Complet' : 'Scan Manuel'
+                    };
+                    sessionStorage.setItem('lastScanInfo', JSON.stringify(scanInfo));
                 }
                 refreshResults();
             }
@@ -424,29 +421,96 @@
             const hosts = await API.scanner.getHosts();
             const container = document.getElementById('resultsContainer');
 
+            // Get last scan info
+            const lastScanInfo = sessionStorage.getItem('lastScanInfo');
+            let scanInfoHtml = '';
+
+            if (lastScanInfo) {
+                const info = JSON.parse(lastScanInfo);
+                scanInfoHtml = `
+                    <div style="background: var(--bg-secondary); border-left: 4px solid var(--primary-color); padding: 1rem; margin-bottom: 1.5rem; border-radius: 6px;">
+                        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
+                            <i class="fas fa-info-circle" style="color: var(--primary-color); font-size: 1.2rem;"></i>
+                            <strong style="color: var(--text-primary);">Dernier scan effectué</strong>
+                        </div>
+                        <div style="font-size: 0.9rem; color: var(--text-secondary); margin-left: 2rem;">
+                            <div><strong>Type:</strong> ${info.type}</div>
+                            <div><strong>Cible:</strong> <code style="background: var(--bg-tertiary); padding: 0.2rem 0.4rem; border-radius: 3px;">${info.target}</code></div>
+                            <div><strong>Date:</strong> ${info.timestamp}</div>
+                        </div>
+                    </div>
+                `;
+            }
+
             if (hosts.length === 0) {
-                container.innerHTML = '<p style="text-align: center; color: var(--text-tertiary); padding: 2rem;"><i class="fas fa-inbox" style="font-size: 2rem; display: block; margin-bottom: 1rem; opacity: 0.5;"></i>Aucun hôte détecté</p>';
+                container.innerHTML = scanInfoHtml + '<p style="text-align: center; color: var(--text-tertiary); padding: 2rem;"><i class="fas fa-inbox" style="font-size: 2rem; display: block; margin-bottom: 1rem; opacity: 0.5;"></i>Aucun hôte détecté pour cette cible</p>';
                 return;
             }
 
-            let html = '<div style="overflow-x: auto;"><table class="table"><thead><tr><th>Adresse IP</th><th>Nom d\'Hôte</th><th>Ports Ouverts</th><th>Détails</th></tr></thead><tbody>';
+            let html = scanInfoHtml + '<div style="overflow-x: auto;"><table class="table"><thead><tr><th>Adresse IP</th><th>Nom d\'Hôte</th><th>Ports Ouverts</th><th>Détails</th></tr></thead><tbody>';
 
             hosts.forEach(host => {
                 const portCount = Object.keys(host.ports).length;
+
+                // Analyser les services pour détecter si on a des informations détaillées
+                let hasDetailedInfo = false;
                 const portDetails = Object.entries(host.ports)
-                    .map(([port, service]) => `${port}: ${service}`)
-                    .join('<br>');
+                    .map(([port, service]) => {
+                        // Détecter si le service contient des informations de version/produit
+                        // Format avancé: "http Apache 2.4.41" vs Standard: "http"
+                        const serviceParts = service.split(' ');
+                        const hasVersion = serviceParts.length > 1;
+
+                        if (hasVersion) {
+                            hasDetailedInfo = true;
+                            const serviceName = serviceParts[0];
+                            const details = serviceParts.slice(1).join(' ');
+
+                            return `
+                                <div style="margin-bottom: 0.75rem; padding: 0.5rem; background: var(--bg-secondary); border-radius: 6px; border-left: 3px solid var(--primary-color);">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
+                                        <span style="font-weight: 600; color: var(--primary-color);">Port ${port}</span>
+                                        <span class="badge badge-success" style="font-size: 0.75rem;">${serviceName}</span>
+                                        <i class="fas fa-info-circle" style="color: var(--info-color); font-size: 0.8rem;" title="Détection avancée activée"></i>
+                                    </div>
+                                    <div style="font-size: 0.85rem; color: var(--text-secondary); margin-left: 0.5rem;">
+                                        <i class="fas fa-cube" style="color: var(--warning-color); margin-right: 0.25rem;"></i>
+                                        <strong>Version:</strong> ${details}
+                                    </div>
+                                </div>
+                            `;
+                        } else {
+                            return `
+                                <div style="margin-bottom: 0.5rem; padding: 0.4rem; background: var(--bg-tertiary); border-radius: 4px;">
+                                    <span style="font-weight: 600; color: var(--text-primary);">Port ${port}:</span>
+                                    <span class="badge badge-info" style="font-size: 0.75rem; margin-left: 0.5rem;">${service}</span>
+                                </div>
+                            `;
+                        }
+                    })
+                    .join('');
+
+                // Badge pour indiquer le mode de détection utilisé
+                const detectionBadge = hasDetailedInfo
+                    ? '<span class="badge badge-success" style="margin-left: 0.5rem;" title="Détection avancée: Services, Versions, OS"><i class="fas fa-microscope"></i> Avancé</span>'
+                    : '<span class="badge badge-secondary" style="margin-left: 0.5rem;" title="Détection standard: Ports et Services de base"><i class="fas fa-search"></i> Standard</span>';
 
                 html += `
                     <tr>
                         <td><code style="background-color: var(--bg-tertiary); padding: 0.25rem 0.5rem; border-radius: 4px;">${host.ip_address}</code></td>
                         <td>${host.hostname || 'N/A'}</td>
-                        <td><span class="badge badge-info">${portCount}</span></td>
+                        <td>
+                            <span class="badge badge-info">${portCount}</span>
+                            ${detectionBadge}
+                        </td>
                         <td>
                             <details style="cursor: pointer;">
-                                <summary style="color: var(--primary-color);">Afficher</summary>
-                                <div style="margin-top: 0.5rem; padding: 0.5rem; background-color: var(--bg-tertiary); border-radius: 4px; font-size: 0.85rem; color: var(--text-secondary);">
-                                    ${portDetails || 'Aucun port ouvert'}
+                                <summary style="color: var(--primary-color); font-weight: 600;">
+                                    <i class="fas fa-chevron-down" style="font-size: 0.8rem; margin-right: 0.25rem;"></i>
+                                    Afficher les détails
+                                </summary>
+                                <div style="margin-top: 0.75rem; padding: 0.75rem; background-color: var(--bg-primary); border-radius: 6px; border: 1px solid var(--border-color);">
+                                    ${portDetails || '<p style="color: var(--text-tertiary); font-style: italic;">Aucun port ouvert</p>'}
                                 </div>
                             </details>
                         </td>
