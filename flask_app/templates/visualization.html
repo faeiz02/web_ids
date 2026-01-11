@@ -48,6 +48,7 @@
         font-size: 1.5rem;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         -webkit-background-clip: text;
+        background-clip: text;
         -webkit-text-fill-color: transparent;
     }
 
@@ -155,8 +156,21 @@
 
 {% block content %}
 <div class="page-content">
-    <!-- Graphiques Principaux -->
-    <div class="viz-grid">
+    <!-- Sélecteur de Type de Vue -->
+    <div style="margin-bottom: 2rem; display: flex; gap: 1rem; align-items: center;">
+        <span style="color: var(--text-secondary); font-weight: 500;">Type de visualisation :</span>
+        <button id="btnShowChartjs" class="refresh-btn" onclick="switchView('chartjs')"
+            style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+            <i class="fas fa-chart-pie"></i> Chart.js (Interactif)
+        </button>
+        <button id="btnShowMatplotlib" class="refresh-btn" onclick="switchView('matplotlib')"
+            style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);">
+            <i class="fas fa-image"></i> Matplotlib (Statique)
+        </button>
+    </div>
+
+    <!-- Graphiques Principaux (Chart.js) -->
+    <div id="chartjsGrid" class="viz-grid">
         <!-- Alertes par Type -->
         <div class="viz-card">
             <div class="viz-header">
@@ -238,6 +252,62 @@
         </div>
     </div>
 
+    <!-- Graphiques Matplotlib (Images) -->
+    <div id="matplotlibGrid" class="viz-grid" style="display: none;">
+        <!-- Alertes par Type (Matplotlib) -->
+        <div class="viz-card">
+            <div class="viz-header">
+                <div class="viz-title">
+                    <i class="fas fa-chart-bar"></i>
+                    <span>Alertes par Type (MPL)</span>
+                </div>
+            </div>
+            <div class="chart-container" style="height: auto;">
+                <img id="imgAlertsByType" style="width: 100%; border-radius: 8px;" src="" alt="Alertes par Type">
+            </div>
+        </div>
+
+        <!-- Volume de Trafic (Matplotlib) -->
+        <div class="viz-card">
+            <div class="viz-header">
+                <div class="viz-title">
+                    <i class="fas fa-network-wired"></i>
+                    <span>Volume de Trafic (MPL)</span>
+                </div>
+            </div>
+            <div class="chart-container" style="height: auto;">
+                <img id="imgTrafficVolume" style="width: 100%; border-radius: 8px;" src="" alt="Volume de Trafic">
+            </div>
+        </div>
+
+        <!-- Timeline des Alertes (Matplotlib) -->
+        <div class="viz-card">
+            <div class="viz-header">
+                <div class="viz-title">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Évolution Temporelle (MPL)</span>
+                </div>
+            </div>
+            <div class="chart-container" style="height: auto;">
+                <img id="imgAlertsTimeline" style="width: 100%; border-radius: 8px;" src="" alt="Évolution Temporelle">
+            </div>
+        </div>
+
+        <!-- Distribution par Sévérité (Matplotlib) -->
+        <div class="viz-card">
+            <div class="viz-header">
+                <div class="viz-title">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span>Sévérité des Alertes (MPL)</span>
+                </div>
+            </div>
+            <div class="chart-container" style="height: auto;">
+                <img id="imgSeverityDistribution" style="width: 100%; border-radius: 8px;" src=""
+                    alt="Sévérité des Alertes">
+            </div>
+        </div>
+    </div>
+
     <!-- Informations -->
     <div class="info-section">
         <h3 style="color: var(--text-primary); margin-bottom: 0.5rem;">
@@ -269,10 +339,51 @@
 </div>
 
 <script>
-    let alertsChartInstance = null;
-    let trafficChartInstance = null;
-    let timelineChartInstance = null;
-    let severityChartInstance = null;
+    var alertsChartInstance = null;
+    var trafficChartInstance = null;
+    var timelineChartInstance = null;
+    var severityChartInstance = null;
+    var currentView = 'chartjs';
+
+
+    function switchView(view) {
+        currentView = view;
+        const chartjsGrid = document.getElementById('chartjsGrid');
+        const matplotlibGrid = document.getElementById('matplotlibGrid');
+        const btnChartjs = document.getElementById('btnShowChartjs');
+        const btnMatplotlib = document.getElementById('btnShowMatplotlib');
+
+        if (view === 'chartjs') {
+            chartjsGrid.style.display = 'grid';
+            matplotlibGrid.style.display = 'none';
+            btnChartjs.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+            btnMatplotlib.style.background = 'rgba(255,255,255,0.1)';
+            loadAllCharts();
+        } else {
+            chartjsGrid.style.display = 'none';
+            matplotlibGrid.style.display = 'grid';
+            btnMatplotlib.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+            btnChartjs.style.background = 'rgba(255,255,255,0.1)';
+            loadMatplotlibPlots();
+        }
+    }
+
+    async function loadMatplotlibPlots() {
+        try {
+            const response = await fetch('/api/visualization/plots');
+            const data = await response.json();
+
+            document.getElementById('imgAlertsByType').src = data.alerts_by_type;
+            document.getElementById('imgTrafficVolume').src = data.traffic_volume;
+            document.getElementById('imgAlertsTimeline').src = data.alerts_timeline;
+            document.getElementById('imgSeverityDistribution').src = data.severity_distribution;
+
+            Toast.success('Graphiques Matplotlib rafraîchis');
+        } catch (error) {
+            console.error('Erreur:', error);
+            Toast.error('Erreur lors du chargement des graphiques Matplotlib');
+        }
+    }
 
     // Couleurs vibrantes et modernes
     const colors = {
@@ -500,19 +611,22 @@
     }
 
     // Charger tous les graphiques au démarrage
-    document.addEventListener('DOMContentLoaded', () => {
-        loadAlertsChart();
-        loadTrafficChart();
-        loadTimelineChart();
-        loadSeverityChart();
-
-        // Auto-refresh toutes les 30 secondes
-        setInterval(() => {
+    function loadAllCharts() {
+        if (currentView === 'chartjs') {
             loadAlertsChart();
             loadTrafficChart();
             loadTimelineChart();
             loadSeverityChart();
-        }, 30000);
+        } else {
+            loadMatplotlibPlots();
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadAllCharts();
+
+        // Auto-refresh toutes les 30 secondes
+        setInterval(loadAllCharts, 30000);
     });
 </script>
 {% endblock %}

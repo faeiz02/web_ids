@@ -20,6 +20,7 @@ from models import Host, Alert, Log
 from managers import LogManager, AlertManager
 from scanner import NetworkScanner
 from ids import IDS
+import utils
 
 # Initialisation de l'application Flask
 app = Flask(__name__, template_folder='templates', static_folder='static')
@@ -445,6 +446,23 @@ def visualization_severity():
         'data': data,
         'total': len(alerts)
     })
+
+
+@app.route('/api/visualization/plots', methods=['GET'])
+def get_visualization_plots():
+    """Retourne les visualisations Matplotlib en base64."""
+    alerts = alert_manager.get_all_alerts()
+    traffic_stats = ids.get_traffic_stats()
+    
+    plots = {
+        'alerts_by_type': utils.visualize_alerts_by_type(alerts),
+        'traffic_volume': utils.visualize_traffic_volume(traffic_stats),
+        'alerts_timeline': utils.visualize_alerts_timeline(alerts),
+        'severity_distribution': utils.visualize_severity_distribution(alerts)
+    }
+    
+    return jsonify(plots)
+
 
 
 # ============================================================================
