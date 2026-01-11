@@ -89,8 +89,14 @@ class AlertManager:
     def __init__(self, alert_file="alerts.jsonl"):
         # Chemin absolu du fichier d'alertes
         self.alert_file = os.path.join(os.path.dirname(__file__), alert_file)
+        self.cache_file = os.path.join(os.path.dirname(__file__), "alert_cache.json")
+        
         # Chargement de toutes les alertes en mémoire
         self.alerts = self._load_alerts()
+        
+        # Cache pour la déduplication {key: timestamp}
+        self.alert_cache = self._load_cache()
+        self.deduplication_window = 30  # Secondes
 
     def _load_alerts(self, limit=None):
         """
@@ -122,6 +128,24 @@ class AlertManager:
                 print(f"Erreur lors du chargement des alertes: {e}")
         return alerts
 
+    def _load_cache(self):
+        """Charge le cache de déduplication depuis un fichier."""
+        if os.path.exists(self.cache_file):
+            try:
+                with open(self.cache_file, 'r') as f:
+                    return json.load(f)
+            except Exception:
+                return {}
+        return {}
+
+    def _save_cache(self):
+        """Sauvegarde le cache de déduplication."""
+        try:
+            with open(self.cache_file, 'w') as f:
+                json.dump(self.alert_cache, f)
+        except Exception:
+            pass
+
     def _save_alerts(self):
         """Sauvegarde toutes les alertes dans le fichier."""
         with open(self.alert_file, 'w') as f:
@@ -130,24 +154,33 @@ class AlertManager:
 
     def generate_alert(self, description, event_type="Intrusion", component="IDS", source_ip=None):
         """
-        Génère et enregistre une nouvelle alerte de sécurité.
-        
-        Args:
-            description: Description détaillée de l'alerte
-            event_type: Type d'événement (Port_Scan, DoS_Simple, etc.)
-            component: Composant source (IDS, Scanner)
-            source_ip: Adresse IP source de la menace
-        
-        Returns:
-            L'objet Alert créé
+        Génère et enregistre une nouvelle alerte de sécurité avec déduplication.
         """
+        import time
+        import re
+        
+        # Recharger le cache pour être synchro entre processus
+        self.alert_cache = self._load_cache()
+        
+        # Création d'une clé unique pour la déduplication
+        # On ignore les chiffres pour fusionner les variations de compteurs
+        clean_desc = re.sub(r'\d+', '', description.split('. Pattern:')[0])
+        dedup_key = f"{event_type}_{source_ip}_{clean_desc}"
+        current_time = time.time()
+        
+        # Vérification du cache de déduplication
+        if dedup_key in self.alert_cache:
+            if current_time - self.alert_cache[dedup_key] < self.deduplication_window:
+                return None
+                
+        # Mise à jour du cache et sauvegarde
+        self.alert_cache[dedup_key] = current_time
+        self._save_cache()
+        
         # Création d'une nouvelle alerte
         new_alert = Alert(description, event_type, component, source_ip)
-        # Ajout à la liste en mémoire
         self.alerts.append(new_alert)
-        # Sauvegarde dans le fichier
         self._save_alerts()
-        # Affichage dans la console
         print(f"!!! NOUVELLE ALERTE !!!: {str(new_alert)}")
         return new_alert
 

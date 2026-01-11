@@ -352,20 +352,17 @@ def visualization_alerts():
     """Retourne les données des alertes par type pour Chart.js."""
     alerts = alert_manager.get_all_alerts()
     
-    # Compter les alertes par type
-    alert_counts = {}
-    for alert in alerts:
-        event_type = alert.event_type
-        alert_counts[event_type] = alert_counts.get(event_type, 0) + 1
+    # Préparer les données pour Chart.js via utils
+    chart_data = utils.prepare_alerts_chart_data(alerts)
     
-    # Préparer les données pour Chart.js
-    labels = list(alert_counts.keys())
-    data = list(alert_counts.values())
+    # Générer l'image Matplotlib via utils
+    matplotlib_image = utils.visualize_alerts_by_type(alerts)
     
     return jsonify({
-        'labels': labels,
-        'data': data,
-        'total': len(alerts)
+        'labels': chart_data['labels'],
+        'data': chart_data['data'],
+        'total': chart_data['total'],
+        'matplotlib': matplotlib_image
     })
 
 
@@ -374,17 +371,17 @@ def visualization_traffic():
     """Retourne les données du volume de trafic pour Chart.js."""
     traffic_stats = ids.get_traffic_stats()
     
-    if not traffic_stats:
-        return jsonify({'labels': [], 'data': [], 'total': 0})
+    # Préparer les données pour Chart.js via utils
+    chart_data = utils.prepare_traffic_chart_data(traffic_stats)
     
-    # Convertir en Mo et préparer les données
-    labels = list(traffic_stats.keys())
-    data = [v / (1024 * 1024) for v in traffic_stats.values()]  # Convertir en Mo
+    # Générer l'image Matplotlib via utils
+    matplotlib_image = utils.visualize_traffic_volume(traffic_stats)
     
     return jsonify({
-        'labels': labels,
-        'data': data,
-        'total': len(traffic_stats)
+        'labels': chart_data['labels'],
+        'data': chart_data['data'],
+        'total': chart_data['total'],
+        'matplotlib': matplotlib_image
     })
 
 
@@ -393,28 +390,17 @@ def visualization_timeline():
     """Retourne l'évolution des alertes dans le temps pour Chart.js."""
     alerts = alert_manager.get_all_alerts()
     
-    if not alerts:
-        return jsonify({'labels': [], 'data': [], 'total': 0})
+    # Préparer les données pour Chart.js via utils
+    chart_data = utils.prepare_timeline_chart_data(alerts)
     
-    # Grouper les alertes par heure
-    from collections import defaultdict
-    hourly_counts = defaultdict(int)
-    
-    for alert in alerts:
-        # Extraire l'heure depuis le timestamp
-        timestamp = alert.timestamp
-        hour_key = timestamp.strftime('%Y-%m-%d %H:00')
-        hourly_counts[hour_key] += 1
-    
-    # Trier par heure
-    sorted_hours = sorted(hourly_counts.keys())
-    labels = [h.split(' ')[1] for h in sorted_hours]  # Garder seulement l'heure
-    data = [hourly_counts[h] for h in sorted_hours]
+    # Générer l'image Matplotlib via utils
+    matplotlib_image = utils.visualize_alerts_timeline(alerts)
     
     return jsonify({
-        'labels': labels,
-        'data': data,
-        'total': len(alerts)
+        'labels': chart_data['labels'],
+        'data': chart_data['data'],
+        'total': chart_data['total'],
+        'matplotlib': matplotlib_image
     })
 
 
@@ -423,46 +409,18 @@ def visualization_severity():
     """Retourne la distribution des alertes par sévérité pour Chart.js."""
     alerts = alert_manager.get_all_alerts()
     
-    # Extraire la sévérité depuis le type d'événement
-    severity_counts = {'HIGH': 0, 'MEDIUM': 0, 'LOW': 0, 'INFO': 0}
+    # Préparer les données pour Chart.js via utils
+    chart_data = utils.prepare_severity_chart_data(alerts)
     
-    for alert in alerts:
-        event_type = alert.event_type.upper()
-        if 'HIGH' in event_type or 'CRITICAL' in event_type:
-            severity_counts['HIGH'] += 1
-        elif 'MEDIUM' in event_type or 'WARNING' in event_type:
-            severity_counts['MEDIUM'] += 1
-        elif 'LOW' in event_type:
-            severity_counts['LOW'] += 1
-        else:
-            severity_counts['INFO'] += 1
-    
-    # Filtrer les sévérités avec 0 alertes
-    labels = [k for k, v in severity_counts.items() if v > 0]
-    data = [v for v in severity_counts.values() if v > 0]
+    # Générer l'image Matplotlib via utils
+    matplotlib_image = utils.visualize_severity_distribution(alerts)
     
     return jsonify({
-        'labels': labels,
-        'data': data,
-        'total': len(alerts)
+        'labels': chart_data['labels'],
+        'data': chart_data['data'],
+        'total': chart_data['total'],
+        'matplotlib': matplotlib_image
     })
-
-
-@app.route('/api/visualization/plots', methods=['GET'])
-def get_visualization_plots():
-    """Retourne les visualisations Matplotlib en base64."""
-    alerts = alert_manager.get_all_alerts()
-    traffic_stats = ids.get_traffic_stats()
-    
-    plots = {
-        'alerts_by_type': utils.visualize_alerts_by_type(alerts),
-        'traffic_volume': utils.visualize_traffic_volume(traffic_stats),
-        'alerts_timeline': utils.visualize_alerts_timeline(alerts),
-        'severity_distribution': utils.visualize_severity_distribution(alerts)
-    }
-    
-    return jsonify(plots)
-
 
 
 # ============================================================================

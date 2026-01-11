@@ -48,7 +48,6 @@
         font-size: 1.5rem;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         -webkit-background-clip: text;
-        background-clip: text;
         -webkit-text-fill-color: transparent;
     }
 
@@ -70,6 +69,51 @@
         position: relative;
         height: 300px;
         margin-top: 1rem;
+        transition: all 0.3s ease;
+    }
+
+    .static-image-container {
+        display: none;
+        width: 100%;
+        height: 300px;
+        margin-top: 1rem;
+        text-align: center;
+        overflow: hidden;
+        border-radius: 8px;
+        background: rgba(0, 0, 0, 0.2);
+    }
+
+    .static-image-container img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+
+    .view-toggle {
+        display: flex;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        padding: 0.25rem;
+        margin-top: 0.5rem;
+    }
+
+    .toggle-btn {
+        flex: 1;
+        background: transparent;
+        border: none;
+        color: var(--text-tertiary);
+        padding: 0.4rem;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.75rem;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+
+    .toggle-btn.active {
+        background: var(--accent-primary);
+        color: white;
+        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
     }
 
     .refresh-btn {
@@ -156,21 +200,8 @@
 
 {% block content %}
 <div class="page-content">
-    <!-- Sélecteur de Type de Vue -->
-    <div style="margin-bottom: 2rem; display: flex; gap: 1rem; align-items: center;">
-        <span style="color: var(--text-secondary); font-weight: 500;">Type de visualisation :</span>
-        <button id="btnShowChartjs" class="refresh-btn" onclick="switchView('chartjs')"
-            style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-            <i class="fas fa-chart-pie"></i> Chart.js (Interactif)
-        </button>
-        <button id="btnShowMatplotlib" class="refresh-btn" onclick="switchView('matplotlib')"
-            style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);">
-            <i class="fas fa-image"></i> Matplotlib (Statique)
-        </button>
-    </div>
-
-    <!-- Graphiques Principaux (Chart.js) -->
-    <div id="chartjsGrid" class="viz-grid">
+    <!-- Graphiques Principaux -->
+    <div class="viz-grid">
         <!-- Alertes par Type -->
         <div class="viz-card">
             <div class="viz-header">
@@ -186,8 +217,15 @@
             <div class="viz-stats">
                 <span class="stat-badge" id="alertsTotal">Total: 0</span>
             </div>
-            <div class="chart-container">
+            <div class="view-toggle">
+                <button class="toggle-btn active" onclick="toggleView('alerts', 'dynamic')">Interactif (JS)</button>
+                <button class="toggle-btn" onclick="toggleView('alerts', 'static')">Statique (PLT)</button>
+            </div>
+            <div id="alertsDynamic" class="chart-container">
                 <canvas id="alertsChart"></canvas>
+            </div>
+            <div id="alertsStatic" class="static-image-container">
+                <img id="alertsImage" src="" alt="Alerte par type">
             </div>
         </div>
 
@@ -206,8 +244,15 @@
             <div class="viz-stats">
                 <span class="stat-badge" id="trafficTotal">Sources: 0</span>
             </div>
-            <div class="chart-container">
+            <div class="view-toggle">
+                <button class="toggle-btn active" onclick="toggleView('traffic', 'dynamic')">Interactif (JS)</button>
+                <button class="toggle-btn" onclick="toggleView('traffic', 'static')">Statique (PLT)</button>
+            </div>
+            <div id="trafficDynamic" class="chart-container">
                 <canvas id="trafficChart"></canvas>
+            </div>
+            <div id="trafficStatic" class="static-image-container">
+                <img id="trafficImage" src="" alt="Volume de trafic">
             </div>
         </div>
 
@@ -226,8 +271,15 @@
             <div class="viz-stats">
                 <span class="stat-badge" id="timelineTotal">Alertes: 0</span>
             </div>
-            <div class="chart-container">
+            <div class="view-toggle">
+                <button class="toggle-btn active" onclick="toggleView('timeline', 'dynamic')">Interactif (JS)</button>
+                <button class="toggle-btn" onclick="toggleView('timeline', 'static')">Statique (PLT)</button>
+            </div>
+            <div id="timelineDynamic" class="chart-container">
                 <canvas id="timelineChart"></canvas>
+            </div>
+            <div id="timelineStatic" class="static-image-container">
+                <img id="timelineImage" src="" alt="Timeline des alertes">
             </div>
         </div>
 
@@ -246,64 +298,15 @@
             <div class="viz-stats">
                 <span class="stat-badge" id="severityTotal">Total: 0</span>
             </div>
-            <div class="chart-container">
+            <div class="view-toggle">
+                <button class="toggle-btn active" onclick="toggleView('severity', 'dynamic')">Interactif (JS)</button>
+                <button class="toggle-btn" onclick="toggleView('severity', 'static')">Statique (PLT)</button>
+            </div>
+            <div id="severityDynamic" class="chart-container">
                 <canvas id="severityChart"></canvas>
             </div>
-        </div>
-    </div>
-
-    <!-- Graphiques Matplotlib (Images) -->
-    <div id="matplotlibGrid" class="viz-grid" style="display: none;">
-        <!-- Alertes par Type (Matplotlib) -->
-        <div class="viz-card">
-            <div class="viz-header">
-                <div class="viz-title">
-                    <i class="fas fa-chart-bar"></i>
-                    <span>Alertes par Type (MPL)</span>
-                </div>
-            </div>
-            <div class="chart-container" style="height: auto;">
-                <img id="imgAlertsByType" style="width: 100%; border-radius: 8px;" src="" alt="Alertes par Type">
-            </div>
-        </div>
-
-        <!-- Volume de Trafic (Matplotlib) -->
-        <div class="viz-card">
-            <div class="viz-header">
-                <div class="viz-title">
-                    <i class="fas fa-network-wired"></i>
-                    <span>Volume de Trafic (MPL)</span>
-                </div>
-            </div>
-            <div class="chart-container" style="height: auto;">
-                <img id="imgTrafficVolume" style="width: 100%; border-radius: 8px;" src="" alt="Volume de Trafic">
-            </div>
-        </div>
-
-        <!-- Timeline des Alertes (Matplotlib) -->
-        <div class="viz-card">
-            <div class="viz-header">
-                <div class="viz-title">
-                    <i class="fas fa-chart-line"></i>
-                    <span>Évolution Temporelle (MPL)</span>
-                </div>
-            </div>
-            <div class="chart-container" style="height: auto;">
-                <img id="imgAlertsTimeline" style="width: 100%; border-radius: 8px;" src="" alt="Évolution Temporelle">
-            </div>
-        </div>
-
-        <!-- Distribution par Sévérité (Matplotlib) -->
-        <div class="viz-card">
-            <div class="viz-header">
-                <div class="viz-title">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <span>Sévérité des Alertes (MPL)</span>
-                </div>
-            </div>
-            <div class="chart-container" style="height: auto;">
-                <img id="imgSeverityDistribution" style="width: 100%; border-radius: 8px;" src=""
-                    alt="Sévérité des Alertes">
+            <div id="severityStatic" class="static-image-container">
+                <img id="severityImage" src="" alt="Sévérité des alertes">
             </div>
         </div>
     </div>
@@ -339,51 +342,10 @@
 </div>
 
 <script>
-    var alertsChartInstance = null;
-    var trafficChartInstance = null;
-    var timelineChartInstance = null;
-    var severityChartInstance = null;
-    var currentView = 'chartjs';
-
-
-    function switchView(view) {
-        currentView = view;
-        const chartjsGrid = document.getElementById('chartjsGrid');
-        const matplotlibGrid = document.getElementById('matplotlibGrid');
-        const btnChartjs = document.getElementById('btnShowChartjs');
-        const btnMatplotlib = document.getElementById('btnShowMatplotlib');
-
-        if (view === 'chartjs') {
-            chartjsGrid.style.display = 'grid';
-            matplotlibGrid.style.display = 'none';
-            btnChartjs.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-            btnMatplotlib.style.background = 'rgba(255,255,255,0.1)';
-            loadAllCharts();
-        } else {
-            chartjsGrid.style.display = 'none';
-            matplotlibGrid.style.display = 'grid';
-            btnMatplotlib.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-            btnChartjs.style.background = 'rgba(255,255,255,0.1)';
-            loadMatplotlibPlots();
-        }
-    }
-
-    async function loadMatplotlibPlots() {
-        try {
-            const response = await fetch('/api/visualization/plots');
-            const data = await response.json();
-
-            document.getElementById('imgAlertsByType').src = data.alerts_by_type;
-            document.getElementById('imgTrafficVolume').src = data.traffic_volume;
-            document.getElementById('imgAlertsTimeline').src = data.alerts_timeline;
-            document.getElementById('imgSeverityDistribution').src = data.severity_distribution;
-
-            Toast.success('Graphiques Matplotlib rafraîchis');
-        } catch (error) {
-            console.error('Erreur:', error);
-            Toast.error('Erreur lors du chargement des graphiques Matplotlib');
-        }
-    }
+    let alertsChartInstance = null;
+    let trafficChartInstance = null;
+    let timelineChartInstance = null;
+    let severityChartInstance = null;
 
     // Couleurs vibrantes et modernes
     const colors = {
@@ -401,6 +363,24 @@
             INFO: '#1dd1a1'
         }
     };
+
+    function toggleView(id, view) {
+        const dynamic = document.getElementById(id + 'Dynamic');
+        const static = document.getElementById(id + 'Static');
+        const btns = dynamic.parentElement.querySelectorAll('.toggle-btn');
+
+        if (view === 'dynamic') {
+            dynamic.style.display = 'block';
+            static.style.display = 'none';
+            btns[0].classList.add('active');
+            btns[1].classList.remove('active');
+        } else {
+            dynamic.style.display = 'none';
+            static.style.display = 'block';
+            btns[0].classList.remove('active');
+            btns[1].classList.add('active');
+        }
+    }
 
     // Configuration commune pour tous les graphiques
     const commonOptions = {
@@ -466,6 +446,11 @@
                 }
             });
 
+            // Mettre à jour l'image statique
+            if (response.matplotlib) {
+                document.getElementById('alertsImage').src = response.matplotlib;
+            }
+
             Toast.success('Graphique des alertes rafraîchi');
         } catch (error) {
             console.error('Erreur:', error);
@@ -512,6 +497,11 @@
                     }
                 }
             });
+
+            // Mettre à jour l'image statique
+            if (response.matplotlib) {
+                document.getElementById('trafficImage').src = response.matplotlib;
+            }
 
             Toast.success('Graphique du trafic rafraîchi');
         } catch (error) {
@@ -564,6 +554,11 @@
                 }
             });
 
+            // Mettre à jour l'image statique
+            if (response.matplotlib) {
+                document.getElementById('timelineImage').src = response.matplotlib;
+            }
+
             Toast.success('Timeline rafraîchie');
         } catch (error) {
             console.error('Erreur:', error);
@@ -603,6 +598,11 @@
                 }
             });
 
+            // Mettre à jour l'image statique
+            if (response.matplotlib) {
+                document.getElementById('severityImage').src = response.matplotlib;
+            }
+
             Toast.success('Graphique de sévérité rafraîchi');
         } catch (error) {
             console.error('Erreur:', error);
@@ -611,22 +611,19 @@
     }
 
     // Charger tous les graphiques au démarrage
-    function loadAllCharts() {
-        if (currentView === 'chartjs') {
+    document.addEventListener('DOMContentLoaded', () => {
+        loadAlertsChart();
+        loadTrafficChart();
+        loadTimelineChart();
+        loadSeverityChart();
+
+        // Auto-refresh toutes les 30 secondes
+        setInterval(() => {
             loadAlertsChart();
             loadTrafficChart();
             loadTimelineChart();
             loadSeverityChart();
-        } else {
-            loadMatplotlibPlots();
-        }
-    }
-
-    document.addEventListener('DOMContentLoaded', () => {
-        loadAllCharts();
-
-        // Auto-refresh toutes les 30 secondes
-        setInterval(loadAllCharts, 30000);
+        }, 30000);
     });
 </script>
 {% endblock %}

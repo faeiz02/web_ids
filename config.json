@@ -1,13 +1,17 @@
 {
   "thresholds": {
-    "dos_volume": 10485760,
-    "port_scan_max_ports": 5,
-    "ssh_bruteforce_attempts": 5,
+    "dos_volume": 13631488,
+    "port_scan_max_ports": 9,
+    "ssh_bruteforce_attempts": 14,
     "icmp_flood_packets": 50
   },
   "scanner": {
-    "max_threads": 100,
+    "max_threads": 30,
     "min_parallelism": 150,
     "min_rate": 400
-  }
+  },
+  "whitelist": [
+    "127.0.0.1",
+    "::1"
+  ]
 }

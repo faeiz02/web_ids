@@ -22,7 +22,8 @@
                 <div style="font-size: 2rem; color: var(--danger-color); margin-bottom: 0.5rem;">
                     <i class="fas fa-exclamation-triangle"></i>
                 </div>
-                <div style="font-size: 0.875rem; color: var(--text-tertiary); margin-bottom: 0.5rem;">Alertes Actives</div>
+                <div style="font-size: 0.875rem; color: var(--text-tertiary); margin-bottom: 0.5rem;">Alertes Actives
+                </div>
                 <div style="font-size: 1.75rem; font-weight: 600;" id="activeAlerts">{{ stats.active_alerts }}</div>
             </div>
         </div>
@@ -32,22 +33,24 @@
                 <div style="font-size: 2rem; color: var(--warning-color); margin-bottom: 0.5rem;">
                     <i class="fas fa-list"></i>
                 </div>
-                <div style="font-size: 0.875rem; color: var(--text-tertiary); margin-bottom: 0.5rem;">Total Alertes</div>
+                <div style="font-size: 0.875rem; color: var(--text-tertiary); margin-bottom: 0.5rem;">Total Alertes
+                </div>
                 <div style="font-size: 1.75rem; font-weight: 600;" id="totalAlerts">{{ stats.total_alerts }}</div>
             </div>
         </div>
 
         <div class="card">
             <div style="text-align: center;">
-                <div style="font-size: 2rem; {% if stats.ids_running %}color: var(--success-color);{% else %}color: var(--text-tertiary);{% endif %} margin-bottom: 0.5rem;">
+                <div
+                    style="font-size: 2rem; {% if stats.ids_running %}color: var(--success-color);{% else %}color: var(--text-tertiary);{% endif %} margin-bottom: 0.5rem;">
                     <i class="fas fa-shield-alt"></i>
                 </div>
                 <div style="font-size: 0.875rem; color: var(--text-tertiary); margin-bottom: 0.5rem;">Statut IDS</div>
                 <div style="font-size: 1.75rem; font-weight: 600;" id="idsStatus">
                     {% if stats.ids_running %}
-                        <span style="color: var(--success-color);">Actif</span>
+                    <span style="color: var(--success-color);">Actif</span>
                     {% else %}
-                        <span style="color: var(--text-tertiary);">Arrêté</span>
+                    <span style="color: var(--text-tertiary);">Arrêté</span>
                     {% endif %}
                 </div>
             </div>
@@ -224,7 +227,7 @@
                     <div style="padding: 1rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: start;">
                         <div style="flex: 1;">
                             <div style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem;">
-                                <span class="badge ${getBadgeClass(alert.event_type)}">${alert.event_type}</span>
+                                <span class="badge ${getBadgeClass(alert.event_type)}"><i class="fas ${getEventIcon(alert.event_type)}"></i> ${alert.event_type}</span>
                                 <span style="font-size: 0.875rem; color: var(--text-tertiary);">${timeStr}</span>
                             </div>
                             <p style="margin: 0; color: var(--text-secondary);">${alert.description}</p>

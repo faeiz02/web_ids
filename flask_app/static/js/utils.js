@@ -25,17 +25,17 @@ function formatRelativeTime(dateString) {
     const date = new Date(dateString);
     const now = new Date();
     const diff = now - date;
-    
+
     const seconds = Math.floor(diff / 1000);
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
     const days = Math.floor(hours / 24);
-    
+
     if (seconds < 60) return 'à l\'instant';
     if (minutes < 60) return `il y a ${minutes} minute${minutes > 1 ? 's' : ''}`;
     if (hours < 24) return `il y a ${hours} heure${hours > 1 ? 's' : ''}`;
     if (days < 7) return `il y a ${days} jour${days > 1 ? 's' : ''}`;
-    
+
     return formatDate(dateString);
 }
 
@@ -44,11 +44,11 @@ function formatRelativeTime(dateString) {
  */
 function formatBytes(bytes) {
     if (bytes === 0) return '0 B';
-    
+
     const k = 1024;
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    
+
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
 }
 
@@ -69,7 +69,7 @@ function copyToClipboard(text) {
 function isValidIP(ip) {
     const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
     if (!ipv4Regex.test(ip)) return false;
-    
+
     const parts = ip.split('.');
     return parts.every(part => parseInt(part) >= 0 && parseInt(part) <= 255);
 }
@@ -80,10 +80,10 @@ function isValidIP(ip) {
 function isValidCIDR(cidr) {
     const cidrRegex = /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/;
     if (!cidrRegex.test(cidr)) return false;
-    
+
     const [ip, mask] = cidr.split('/');
     const maskNum = parseInt(mask);
-    
+
     return isValidIP(ip) && maskNum >= 0 && maskNum <= 32;
 }
 
@@ -93,7 +93,7 @@ function isValidCIDR(cidr) {
 function isValidPortRange(range) {
     const rangeRegex = /^\d+(-\d+)?$/;
     if (!rangeRegex.test(range)) return false;
-    
+
     if (range.includes('-')) {
         const [start, end] = range.split('-').map(Number);
         return start >= 1 && start <= 65535 && end >= 1 && end <= 65535 && start <= end;
@@ -166,7 +166,7 @@ function debounce(func, wait) {
  */
 function throttle(func, limit) {
     let inThrottle;
-    return function(...args) {
+    return function (...args) {
         if (!inThrottle) {
             func.apply(this, args);
             inThrottle = true;
@@ -202,6 +202,14 @@ function updateUrlParams(params) {
  * Détermine la couleur d'un badge basée sur le type
  */
 function getBadgeClass(type) {
+    if (!type) return 'badge-info';
+
+    // Vérification de la sévérité dans le type d'événement
+    if (type.includes('Critical')) return 'badge-danger';
+    if (type.includes('High')) return 'badge-warning';
+    if (type.includes('Low')) return 'badge-info';
+    if (type.includes('Medium')) return 'badge-warning';
+
     const typeMap = {
         'success': 'badge-success',
         'error': 'badge-danger',
@@ -210,7 +218,9 @@ function getBadgeClass(type) {
         'info': 'badge-info',
         'Port_Scan': 'badge-danger',
         'DoS_Simple': 'badge-danger',
-        'Intrusion': 'badge-danger'
+        'Intrusion': 'badge-danger',
+        'SSH_Brute_Force': 'badge-danger',
+        'ICMP_Flood': 'badge-warning'
     };
     return typeMap[type] || 'badge-info';
 }
@@ -219,10 +229,22 @@ function getBadgeClass(type) {
  * Obtient l'icône basée sur le type d'événement
  */
 function getEventIcon(type) {
+    if (!type) return 'fa-info-circle';
+
+    // Détection par mot clé
+    if (type.includes('Signature')) return 'fa-fingerprint';
+    if (type.includes('DoS')) return 'fa-exclamation-triangle';
+    if (type.includes('Port_Scan')) return 'fa-network-wired';
+    if (type.includes('SSH')) return 'fa-key';
+    if (type.includes('Flood')) return 'fa-water';
+
     const iconMap = {
         'Port_Scan': 'fa-network-wired',
         'DoS_Simple': 'fa-exclamation-triangle',
+        'DoS_Packet_Flood': 'fa-cloud-showers-heavy',
         'Intrusion': 'fa-shield-alt',
+        'SSH_Brute_Force': 'fa-key',
+        'ICMP_Flood': 'fa-water',
         'SCAN_START': 'fa-play',
         'SCAN_END': 'fa-check',
         'HOST_DETECTED': 'fa-desktop',
@@ -242,11 +264,11 @@ function exportToCSV(data, filename = 'export.csv') {
         Toast.warning('Aucune donnée à exporter');
         return;
     }
-    
+
     const headers = Object.keys(data[0]);
     const csv = [
         headers.join(','),
-        ...data.map(row => 
+        ...data.map(row =>
             headers.map(header => {
                 const value = row[header];
                 // Échappe les valeurs contenant des guillemets ou des virgules
@@ -257,7 +279,7 @@ function exportToCSV(data, filename = 'export.csv') {
             }).join(',')
         )
     ].join('\n');
-    
+
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -267,7 +289,7 @@ function exportToCSV(data, filename = 'export.csv') {
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
-    
+
     Toast.success('Données exportées');
 }
 
@@ -293,11 +315,11 @@ function initTooltips() {
                 pointer-events: none;
             `;
             document.body.appendChild(tooltip);
-            
+
             const rect = e.target.getBoundingClientRect();
             tooltip.style.left = (rect.left + rect.width / 2 - tooltip.offsetWidth / 2) + 'px';
             tooltip.style.top = (rect.top - tooltip.offsetHeight - 10) + 'px';
-            
+
             element.addEventListener('mouseleave', () => tooltip.remove());
         });
     });

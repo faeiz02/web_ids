@@ -141,7 +141,7 @@
                 <tr>
                     <td style="font-size: 0.85rem;">${timeStr}</td>
                     <td style="font-weight: bold;">${alert.source_ip || 'N/A'}</td>
-                    <td><span class="badge ${getBadgeClass(alert.event_type)}">${alert.event_type}</span></td>
+                    <td><span class="badge ${getBadgeClass(alert.event_type)}"><i class="fas ${getEventIcon(alert.event_type)}"></i> ${alert.event_type}</span></td>
                     <td style="max-width: 300px; word-wrap: break-word;">${alert.description}</td>
                     <td>${alert.component}</td>
                     <td><span class="badge ${statusBadge}">${status}</span></td>

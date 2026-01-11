@@ -44,6 +44,34 @@ if __name__ == '__main__':
     ╚══════════════════════════════════════════════════════════════════╝
     """)
 
-    # Démarrer l'application Flask
-    app.run(debug=debug_mode, host=host, port=port)
+    # === Empêcher les instances multiples ===
+    import os
+    lock_file = os.path.join(os.path.dirname(__file__), "app.lock")
+    
+    if os.path.exists(lock_file):
+        # Vérifier si le process est toujours en vie (sur Windows simple check d'existence suffit souvent, 
+        # mais on va essayer de le supprimer au cas où c'est un reste de crash)
+        try:
+            os.remove(lock_file)
+        except Exception:
+            print("\n" + "!"*60)
+            print("ERREUR: Une instance du serveur est déjà en cours d'exécution.")
+            print("Fermez tous les autres terminaux python avant de relancer.")
+            print("!"*60 + "\n")
+            sys.exit(1)
+            
+    # Créer le lock
+    with open(lock_file, "w") as f:
+        f.write(str(os.getpid()))
+        
+    try:
+        # Démarrer l'application Flask
+        app.run(debug=debug_mode, host=host, port=port)
+    finally:
+        # Supprimer le lock à l'arrêt
+        if os.path.exists(lock_file):
+            try:
+                os.remove(lock_file)
+            except:
+                pass
 

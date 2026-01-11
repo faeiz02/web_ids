@@ -5,6 +5,7 @@ import time
 import json
 import re
 import os
+import socket
 from urllib.parse import unquote
 
 class IDS:
@@ -33,18 +34,27 @@ class IDS:
         self.traffic_volume = {}      # {ip_src: bytes_count} - Volume de trafic par IP
         self.ssh_attempts = {}        # {ip_src: count} - Tentatives de connexion SSH
         self.icmp_packets = {}        # {ip_src: count} - Nombre de paquets ICMP
+        self.packet_counts = {}       # {ip_src: count} - Nombre total de paquets par IP
+        self.last_pps_reset = time.time()
         
         # Seuils de détection configurables (chargés depuis config.json)
         self.volume_threshold = 10000000  # Seuil DoS par défaut
         self.port_scan_threshold = 5  # Nombre de ports pour détecter un scan
         self.ssh_bruteforce_threshold = 5  # Tentatives SSH avant alerte
         self.icmp_flood_threshold = 50  # Paquets ICMP avant alerte
+        self.pps_threshold = 1000      # Paquets par seconde par défaut
+        self.cooldown_period = 30  # Secondes
         
-        # Chargement de la configuration
+        # Whitelist (IPs à ignorer pour les alertes)
+        self.whitelist = ["127.0.0.1", "::1"]
         self._load_config()
+        self._detect_local_ips()
         
         # Chargement des signatures d'attaques depuis le fichier JSON
         self.signatures = self._load_signatures()
+        
+        # Cooldowns internes pour éviter de spammer le manager { (ip, type): last_time }
+        self.detection_cooldowns = {}
 
     def _load_config(self, filepath="config.json"):
         """Charge la configuration des seuils depuis un fichier JSON."""
@@ -58,6 +68,14 @@ class IDS:
                     self.port_scan_threshold = thresholds.get('port_scan_max_ports', 5)
                     self.ssh_bruteforce_threshold = thresholds.get('ssh_bruteforce_attempts', 5)
                     self.icmp_flood_threshold = thresholds.get('icmp_flood_packets', 50)
+                    self.pps_threshold = thresholds.get('dos_max_pps', 1000)
+                    
+                    # Charger la whitelist
+                    custom_whitelist = config.get('whitelist', [])
+                    for ip in custom_whitelist:
+                        if ip not in self.whitelist:
+                            self.whitelist.append(ip)
+                            
                     self.log_manager.log(f"Configuration chargée: DoS={self.volume_threshold}, PortScan={self.port_scan_threshold}, SSH={self.ssh_bruteforce_threshold}, ICMP={self.icmp_flood_threshold}", event_type="CONFIG_LOADED", component="IDS")
             except Exception as e:
                 self.log_manager.log(f"Erreur lors du chargement de la configuration: {e}", event_type="ERROR", component="IDS")
@@ -85,6 +103,34 @@ class IDS:
                 self.log_manager.log(f"Erreur lors du chargement des signatures: {e}", event_type="ERROR", component="IDS")
         return []
 
+    def _detect_local_ips(self):
+        """Détecte les IPs locales de la machine pour les ajouter à la whitelist."""
+        try:
+            # Obtenir le nom d'hôte
+            hostname = socket.gethostname()
+            # Obtenir toutes les IPs liées au nom d'hôte
+            local_ips = socket.gethostbyname_ex(hostname)[2]
+            for ip in local_ips:
+                if ip not in self.whitelist:
+                    self.whitelist.append(ip)
+            
+            # Essayer une autre méthode pour être sûr (connexion factice)
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                # N'a pas besoin d'être atteignable
+                s.connect(('8.8.8.8', 1))
+                ip = s.getsockname()[0]
+                if ip not in self.whitelist:
+                    self.whitelist.append(ip)
+            except Exception:
+                pass
+            finally:
+                s.close()
+                
+            # print(f"[DEBUG] Whitelist IDS: {self.whitelist}")
+        except Exception:
+            pass
+
     def _analyze_packet(self, packet):
         """
         Analyse un paquet réseau pour détecter des activités suspectes.
@@ -102,6 +148,12 @@ class IDS:
             ip_src = packet[IP].src  # Adresse IP source
             ip_dst = packet[IP].dst  # Adresse IP destination
             
+            # --- Filtrage par Whitelist ---
+            # On ignore les paquets dont la source est dans la whitelist
+            # (souvent le scanner local ou la machine elle-même)
+            if ip_src in self.whitelist:
+                return
+            
             # --- Suivi du volume de trafic par IP source ---
             # Permet de détecter les attaques DoS basées sur le volume
             packet_size = len(packet)
@@ -118,15 +170,30 @@ class IDS:
                 )
                 # Réinitialisation du compteur pour éviter les alertes répétitives
                 self.traffic_volume[ip_src] = 0 
+            
+            # --- Détection DoS par nombre de paquets (Flood) ---
+            current_time = time.time()
+            self.packet_counts[ip_src] = self.packet_counts.get(ip_src, 0) + 1
+            
+            # Réinitialisation périodique du compteur PPS (toutes les secondes)
+            if current_time - self.last_pps_reset > 1.0:
+                self.packet_counts = {}
+                self.last_pps_reset = current_time
+                
+            if self.packet_counts.get(ip_src, 0) > self.pps_threshold:
+                self.alert_manager.generate_alert(
+                    f"Attaque DoS par flood de paquets détectée de {ip_src}. Taux: >{self.pps_threshold} pps.",
+                    event_type="DoS_Packet_Flood",
+                    component="IDS",
+                    source_ip=ip_src
+                )
+                self.packet_counts[ip_src] = 0 # Reset local pour cette IP
 
             # === ANALYSE DES PAQUETS TCP ===
             if TCP in packet:
                 src_port = packet[TCP].sport  # Port source
                 dst_port = packet[TCP].dport  # Port destination
                 
-                # DEBUG: Affichage du trafic TCP pour le débogage
-                print(f"[DEBUG] TCP Packet: {ip_src}:{src_port} -> {packet[IP].dst}:{dst_port}")
-
                 # --- Détection de scan de ports ---
                 # Les paquets SYN (flag 'S') indiquent une tentative de connexion
                 if packet[TCP].flags == 'S':
@@ -202,7 +269,6 @@ class IDS:
             # --- Recherche du pattern dans le payload ---
             # Utilisation d'une regex insensible à la casse
             if re.search(sig['pattern'], payload, re.IGNORECASE):
-                print(f"[DEBUG] !! MATCH SIGNATURE !! {sig['name']}")
                 self.alert_manager.generate_alert(
                     f"Attaque détectée: {sig['name']} depuis {ip_src}. Pattern: {sig['pattern']}",
                     event_type=f"Signature_Match_{sig['severity']}",
@@ -234,13 +300,21 @@ class IDS:
         # --- Détection du scan ---
         # Si l'IP a tenté de se connecter à plus de N ports différents (configurable)
         if len(self.port_scan_attempts[ip_src]) > self.port_scan_threshold:
-            self.alert_manager.generate_alert(
-                f"Scan de ports suspect détecté de {ip_src}. Tentatives sur {len(self.port_scan_attempts[ip_src])} ports.",
-                event_type="Port_Scan",
-                component="IDS",
-                source_ip=ip_src
-            )
-            # Réinitialiser après alerte
+            current_time = time.time()
+            cooldown_key = (ip_src, "Port_Scan")
+            
+            if cooldown_key not in self.detection_cooldowns or \
+               current_time - self.detection_cooldowns[cooldown_key] > self.cooldown_period:
+                
+                self.alert_manager.generate_alert(
+                    f"Scan de ports suspect détecté de {ip_src}. Tentatives sur {len(self.port_scan_attempts[ip_src])} ports.",
+                    event_type="Port_Scan",
+                    component="IDS",
+                    source_ip=ip_src
+                )
+                self.detection_cooldowns[cooldown_key] = current_time
+            
+            # Réinitialiser après tentative de détection (même si cooldown)
             self.port_scan_attempts[ip_src] = {}
 
     def _detect_ssh_bruteforce(self, ip_src):
@@ -262,13 +336,21 @@ class IDS:
         # --- Détection du brute force ---
         # Si l'IP a effectué plus de N tentatives de connexion SSH (configurable)
         if self.ssh_attempts[ip_src] > self.ssh_bruteforce_threshold:
-            self.alert_manager.generate_alert(
-                f"Attaque SSH Brute Force détectée de {ip_src}. {self.ssh_attempts[ip_src]} tentatives de connexion.",
-                event_type="SSH_Brute_Force",
-                component="IDS",
-                source_ip=ip_src
-            )
-            # Réinitialiser après alerte
+            current_time = time.time()
+            cooldown_key = (ip_src, "SSH_Brute_Force")
+            
+            if cooldown_key not in self.detection_cooldowns or \
+               current_time - self.detection_cooldowns[cooldown_key] > self.cooldown_period:
+                
+                self.alert_manager.generate_alert(
+                    f"Attaque SSH Brute Force détectée de {ip_src}. {self.ssh_attempts[ip_src]} tentatives de connexion.",
+                    event_type="SSH_Brute_Force",
+                    component="IDS",
+                    source_ip=ip_src
+                )
+                self.detection_cooldowns[cooldown_key] = current_time
+            
+            # Réinitialiser après tentative de détection
             self.ssh_attempts[ip_src] = 0
 
     def _detect_icmp_flood(self, ip_src):

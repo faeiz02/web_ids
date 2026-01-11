@@ -7,14 +7,6 @@ from managers import LogManager
 class NetworkScanner:
     """
     Effectue des scans réseau en utilisant la bibliothèque python-nmap.
-    Implémente les fonctionnalités 3.1.1 à 3.1.4 avec options avancées.
-    
-    Fonctionnalités:
-    - Détection d'hôtes actifs sur le réseau
-    - Scan de ports et détection de services
-    - Scan parallèle pour améliorer les performances
-    - Support de différentes vitesses de scan (T1-T5)
-    - Détection d'OS et de versions de services
     """
     def __init__(self, log_manager: LogManager):
         self.nm = nmap.PortScanner()  # Instance du scanner Nmap
@@ -55,8 +47,6 @@ class NetworkScanner:
     def stop_scan(self):
         """
         Arrête le scan en cours.
-        
-        Utilisé pour interrompre un scan long qui prend trop de temps.
         """
         self.stop_requested = True
         if self.current_executor:
@@ -89,16 +79,6 @@ class NetworkScanner:
     def _build_nmap_arguments(self, scan_type, ports=None, detection='none', speed='T3', scan_method='connect'):
         """
         Construit les arguments Nmap selon les options choisies.
-        
-        Args:
-            scan_type: 'discovery' (découverte d'hôtes), 'ports' (scan de ports), ou 'full' (complet)
-            ports: plage de ports (ex: '1-1024', '80,443')
-            detection: 'none' (standard), 'services' (détection avancée avec OS et versions)
-            speed: 'T1' (lent/furtif), 'T3' (normal), 'T4' (rapide), 'T5' (très rapide)
-            scan_method: 'connect' (-sT, compatible Windows) ou 'syn' (-sS, nécessite root)
-        
-        Returns:
-            Chaîne d'arguments Nmap prête à l'emploi
         """
         args = []
         
@@ -134,39 +114,9 @@ class NetworkScanner:
         
         return ' '.join(args)
 
-    def _format_results(self, scan_results, format_type='normal'):
-        """
-        Formate les résultats selon le type demandé.
-        
-        Args:
-            scan_results: données brutes du scan
-            format_type: 'normal', 'detailed', 'json', 'xml'
-        """
-        if format_type == 'json':
-            return json.dumps(scan_results, indent=2)
-        elif format_type == 'xml':
-            # Nmap peut générer du XML nativement
-            return self.nm.get_nmap_last_output()
-        elif format_type == 'detailed':
-            # Format détaillé avec toutes les informations
-            detailed = []
-            for host_ip, host_data in scan_results.items():
-                detailed.append(f"\n{'='*60}")
-                detailed.append(f"Hôte: {host_ip}")
-                detailed.append(f"Hostname: {host_data.get('hostname', 'N/A')}")
-                detailed.append(f"État: {host_data.get('state', 'N/A')}")
-                
-                if 'ports' in host_data and host_data['ports']:
-                    detailed.append("\nPorts ouverts:")
-                    for port, service in host_data['ports'].items():
-                        detailed.append(f"  - Port {port}: {service}")
-                
-                if 'os' in host_data:
-                    detailed.append(f"\nOS détecté: {host_data['os']}")
-            
-            return '\n'.join(detailed)
-        else:  # format normal
-            return scan_results
+    def _format_results(self, scan_results):
+        """Formate sommairement les résultats en dictionnaire pour Flask."""
+        return scan_results
 
     def detect_active_hosts(self, target_range, detection='none', speed='T3', scan_method='connect'):
         """
@@ -386,7 +336,7 @@ class NetworkScanner:
 
 
     def perform_full_network_scan(self, target_range, ports='1-100', detection='none', 
-                                   speed='T3', output_format='normal', scan_method='connect'):
+                                   speed='T3', scan_method='connect'):
         """
         Effectue un scan complet du réseau (3.1.4).
         Détecte les hôtes actifs, puis scanne les ports et services sur chacun.
@@ -403,7 +353,6 @@ class NetworkScanner:
             'ports': ports,
             'detection': detection,
             'speed': speed,
-            'format': output_format,
             'method': scan_method
         }
         
@@ -423,7 +372,7 @@ class NetworkScanner:
                 event_type="FULL_SCAN_END", 
                 component="NetworkScanner"
             )
-            return self._format_results({}, output_format)
+            return self._format_results({})
 
         # === 2. Scan de ports et services sur chaque hôte actif (PARALLÈLE) ===
         # Utilisation de ThreadPoolExecutor pour scanner plusieurs hôtes simultanément
@@ -506,14 +455,14 @@ class NetworkScanner:
         )
         
         # 3. Formater et retourner les résultats
-        formatted_results = self._format_results(scan_results, output_format)
+        formatted_results = self._format_results(scan_results)
         
         # Enregistrer les résultats formatés dans les logs
         self.log_manager.log(
             "Résultats du scan complet générés",
             event_type="SCAN_RESULTS",
             component="NetworkScanner",
-            details={'format': output_format, 'hosts_count': len(scan_results)}
+            details={'hosts_count': len(scan_results)}
         )
         
         return formatted_results
